@@ -7,6 +7,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+dl-group-cw.code-workspace
 
 # C extensions
 *.so
