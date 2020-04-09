@@ -6,5 +6,5 @@ setup(
     name="ssdn",
     version=__version__,
     packages=find_packages(),
-    install_requires=[],
+    install_requires=["nptyping"],
 )
