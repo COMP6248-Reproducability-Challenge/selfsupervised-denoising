@@ -23,6 +23,7 @@ class FixedLengthSampler(Sampler):
             Defaults to None; this is equivalent to the length of the dataset.
         shuffled (bool, optional): Whether to randomise order. Defaults to False.
     """
+
     def __init__(
         self, data_source: Dataset, num_samples: int = None, shuffled: bool = False,
     ):
@@ -47,7 +48,7 @@ class FixedLengthSampler(Sampler):
         if self.shuffled:
             while remaining > 0:
                 n = min(remaining, len(self.data_source))
-                for idx in torch.randperm(len(self.data_source))[0 : n + 1]:
+                for idx in torch.randperm(len(self.data_source))[0 : n]:
                     yield int(idx)
                 remaining -= n
         else:
