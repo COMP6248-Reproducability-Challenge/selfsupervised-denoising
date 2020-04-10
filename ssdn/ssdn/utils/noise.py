@@ -22,10 +22,13 @@ def set_seed(seed: int):
     operation_seed_counter = seed
 
 
-def add_gaussian_(
-    tensor: Tensor, std_dev: Union[Number, Tuple[Number, Number]], mean: Number = 0
+def add_gaussian(
+    tensor: Tensor,
+    std_dev: Union[Number, Tuple[Number, Number]],
+    mean: Number = 0,
+    inplace: bool = False,
 ) -> Tuple[Tensor, Union[Number, Tensor]]:
-    """In-place operation for adding Gaussian noise to a batch of input images.
+    """Adds Gaussian noise to a batch of input images.
 
     Args:
         tensor (Tensor): Tensor to add noise to; this should be in a B*** format, e.g. BCHW.
@@ -35,13 +38,17 @@ def add_gaussian_(
             If the input value(s) are integers they will be divided by 255 inline with the
             input image dynamic ranges.
         mean (Number, optional): Mean of noise being added. Defaults to 0.
+        inplace (bool, optional): Whether to add the noise in-place. Defaults to False.
 
     Returns:
         Tuple[Tensor, Union[Number, Tensor]]: Tuple containing:
-            * Reference to the input Tensor.
+            * Copy of or reference to input tensor with noise added.
             * Standard deviation (SD) used for noise generation. This will be an array of
             the different SDs used if a range of SDs are being used.
     """
+    if not inplace:
+        tensor = tensor.clone()
+
     torch.manual_seed(get_seed())
     if isinstance(std_dev, (list, tuple)):
         if len(std_dev) == 1:
@@ -60,48 +67,27 @@ def add_gaussian_(
     return tensor.add_(torch.randn(tensor.size()) * std_dev + mean), std_dev
 
 
-def add_gaussian(
-    tensor: Tensor, std_dev: Union[Number, Tuple[Number, Number]], mean: Number = 0
+def add_poisson(
+    tensor: Tensor, lam: Union[Number, Tuple[Number, Number]], inplace: bool = False
 ) -> Tuple[Tensor, Union[Number, Tensor]]:
-    """Clones the input tensor and adds gaussian noise to it using an in-place
-    additive gaussian operation (`add_gaussian_`).
-
-    Args:
-        tensor (Tensor): Tensor to add noise to; this should be in a B*** format, e.g. BCHW.
-        std_dev (Union[Number, Tuple[Number, Number]]): Standard deviation of noise being
-            added. If a Tuple is provided then a standard deviation pulled from the
-            uniform distribution between the two value is used for each batched input (B***).
-            If the input value(s) are integers they will be divided by 255 inline with the
-            input image dynamic ranges.
-        mean (Number, optional): Mean of noise being added. Defaults to 0.
-
-
-    Returns:
-        Tuple[Tensor, Union[Number, Tensor]]: Tuple containing:
-            * Copy of input tensor with noise added.
-            * Standard deviation (SD) used for noise generation. This will be an array of
-            the different SDs used if a range of SDs are being used.
-    """
-    return add_gaussian_(tensor.clone(), std_dev, mean=mean)
-
-
-def add_poisson_(
-    tensor: Tensor, lam: Union[Number, Tuple[Number, Number]]
-) -> Tuple[Tensor, Union[Number, Tensor]]:
-    """In-place operation for adding Poisson noise to a batch of input images.
+    """Adds Poisson noise to a batch of input images.
 
     Args:
         tensor (Tensor): Tensor to add noise to; this should be in a B*** format, e.g. BCHW.
         lam (Union[Number, Tuple[Number, Number]]): Distribution rate parameter (lambda) for
             noise being added. If a Tuple is provided then the lambda is pulled from the
             uniform distribution between the two value is used for each batched input (B***).
+        inplace (bool, optional): Whether to add the noise in-place. Defaults to False.
 
     Returns:
         Tuple[Tensor, Union[Number, Tensor]]: Tuple containing:
-            * Copy of input tensor with noise added.
-            *  Lambda used for noise generation. This will be an array of the different
+            * Copy of or reference to input tensor with noise added.
+            * Lambda used for noise generation. This will be an array of the different
             lambda used if a range of lambda are being used.
     """
+    if not inplace:
+        tensor = tensor.clone()
+
     torch.manual_seed(get_seed())
     if isinstance(lam, (list, tuple)):
         if len(lam) == 1:
@@ -117,26 +103,6 @@ def add_poisson_(
     tensor.add_(noise)
     tensor.div_(lam)
     return tensor, lam
-
-
-def add_poisson(
-    tensor: Tensor, lam: Union[Number, Tuple[Number, Number]]
-) -> Tuple[Tensor, Union[Number, Tensor]]:
-    """Clones the input tensor and adds Poisson noise to it in-place (`add_poisson_`).
-
-    Args:
-        tensor (Tensor): Tensor to add noise to; this should be in a B*** format, e.g. BCHW.
-        lam (Union[Number, Tuple[Number, Number]]): Distribution rate parameter (lambda) for
-            noise being added. If a Tuple is provided then the lambda is pulled from the
-            uniform distribution between the two value is used for each batched input (B***).
-
-    Returns:
-        Tuple[Tensor, Union[Number, Tensor]]: Tuple containing:
-            * Copy of input tensor with noise added.
-            *  Lambda used for noise generation. This will be an array of the different
-            lambda used if a range of lambda are being used.
-    """
-    return add_poisson_(tensor.clone(), lam)
 
 
 def add_style(
@@ -166,15 +132,9 @@ def add_style(
             params = [float(p) for p in params]
         else:
             params = [int(p) for p in params]
-        if inplace:
-            return add_gaussian_(images, params)
-        else:
-            return add_gaussian(images, params)
+        return add_gaussian(images, params, inplace=inplace)
     elif style.startswith("poisson"):  # Poisson noise with constant/variable lambda.
         params = [float(p) for p in style.replace("poisson", "", 1).split("_")]
-        if inplace:
-            return add_poisson_(images, params)
-        else:
-            return add_poisson(images, params)
+        return add_poisson(images, params, inplace=inplace)
     else:
         raise NotImplementedError("Noise type not supported")
