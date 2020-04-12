@@ -1,3 +1,2 @@
 from ssdn.utils.utils import *
-
-import ssdn.utils.noise as noise
+from . import noise
