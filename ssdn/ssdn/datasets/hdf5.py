@@ -9,7 +9,7 @@ import ssdn.utils
 import torchvision.transforms.functional as F
 
 from torch.utils.data import Dataset
-from ssdn.utils import Transform
+from ssdn.utils.transforms import Transform
 
 
 class HDF5Dataset(Dataset):

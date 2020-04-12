@@ -7,7 +7,7 @@ import torchvision.transforms.functional as F
 import os
 import glob
 
-from ssdn.utils import Transform
+from ssdn.utils.transforms import Transform, NoiseTransform
 from torch.utils.data import Dataset
 from torchvision.datasets.folder import default_loader, IMG_EXTENSIONS
 
@@ -64,7 +64,8 @@ class UnlabelledImageFolderDataset(Dataset):
         # Convert to tensor if this hasn't be done during the transform
         if not isinstance(img, torch.Tensor):
             img = F.to_tensor(img)
-        return img, index
+        nt = NoiseTransform('gauss50')
+        return (nt(img), nt(img))
 
     def __len__(self):
         return len(self.files)

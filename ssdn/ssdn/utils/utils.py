@@ -5,13 +5,8 @@ __authors__ = "David Jones <dsj1n15@ecs.soton.ac.uk>"
 
 import numpy as np
 
-from typing import NewType
 from nptyping import Array
 from numbers import Number
-
-Transform = NewType("Transform", object)
-"""Typing label for otherwise undefined Transform type.
-"""
 
 
 def set_color_channels(x: Array[Number], num_channels: int):
