@@ -21,3 +21,38 @@ def set_color_channels(x: Array[Number], num_channels: int):
     if np.issubdtype(x.dtype, np.integer):
         y = np.round(y).astype(x.dtype)
     return y
+
+
+def compute_ramped_lrate(
+    i: int,
+    iteration_count: int,
+    ramp_up_fraction: float,
+    ramp_down_fraction: float,
+    learning_rate: float,
+) -> float:
+    if ramp_up_fraction > 0.0:
+        ramp_up_end_iter = iteration_count * ramp_up_fraction
+        if i <= ramp_up_end_iter:
+            t = (i / ramp_up_fraction) / iteration_count
+            learning_rate = learning_rate * (0.5 - np.cos(t * np.pi) / 2)
+
+    if ramp_down_fraction > 0.0:
+        ramp_down_start_iter = iteration_count * (1 - ramp_down_fraction)
+        if i >= ramp_down_start_iter:
+            t = ((i - ramp_down_start_iter) / ramp_down_fraction) / iteration_count
+            learning_rate = learning_rate * (0.5 + np.cos(t * np.pi) / 2) ** 2
+
+    return learning_rate
+
+
+if __name__ == "__main__":
+    learning_rate = 3e-4
+    rampup_fraction = 0.1
+    rampdown_fraction = 0.3
+    num_iter = 100
+    minibatch_size = 2
+    for n in range(0, num_iter + minibatch_size, minibatch_size):
+        lr = compute_ramped_lrate(
+            n, num_iter, rampup_fraction, rampdown_fraction, learning_rate
+        )
+        print(lr)

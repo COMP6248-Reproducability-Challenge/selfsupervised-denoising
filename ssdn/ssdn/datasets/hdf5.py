@@ -13,7 +13,6 @@ from ssdn.utils.transforms import Transform
 
 
 class HDF5Dataset(Dataset):
-
     def __init__(self, file_path: str, transform: Transform = None):
         """Custom dataset for loading from a file stored in the HDF5 format. This is
         provided to mirror the file format created by the `dataset_tool_h5.py` used

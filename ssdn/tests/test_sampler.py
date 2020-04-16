@@ -34,7 +34,7 @@ def collapse_index_batches(index_batches: List[List[Any]]) -> List[Any]:
 
 
 def split_list(list: List, n: int) -> List[List[Any]]:
-    return [list[i * n:(i + 1) * n] for i in range((len(list) + n - 1) // n )]
+    return [list[i * n : (i + 1) * n] for i in range((len(list) + n - 1) // n)]
 
 
 def check_sequential_with_reset(indexes: List[int], max_index: int):
@@ -63,7 +63,12 @@ def check_index_repetition(indexes: List[int], max_index: int):
 def _test_sequential(dataset_length: int, num_samples: int):
     dataset = MockIndexDataset(dataset_length)
     sampler = FixedLengthSampler(dataset, num_samples=num_samples, shuffled=False)
-    loader_params = {'batch_size': 1, 'num_workers': num_workers, 'drop_last': False, 'sampler': sampler}
+    loader_params = {
+        "batch_size": 1,
+        "num_workers": num_workers,
+        "drop_last": False,
+        "sampler": sampler,
+    }
     dataloader = DataLoader(dataset, **loader_params)
     indexes = read_dataloader(dataloader)
     check_sequential_with_reset(indexes, dataset_length)
@@ -86,7 +91,12 @@ def test_sequential_batched():
     batch_size = 2
     dataset = MockIndexDataset(dataset_length)
     sampler = FixedLengthSampler(dataset, num_samples=9, shuffled=False)
-    loader_params = {'batch_size': batch_size, 'num_workers': num_workers, 'drop_last': True, 'sampler': sampler}
+    loader_params = {
+        "batch_size": batch_size,
+        "num_workers": num_workers,
+        "drop_last": True,
+        "sampler": sampler,
+    }
     dataloader = DataLoader(dataset, **loader_params)
     index_batches = read_dataloader(dataloader)
     # Note drop_last == True ensures we only get full batches back
@@ -98,7 +108,12 @@ def test_sequential_batched():
 def _test_shuffled(dataset_length: int, num_samples: int):
     dataset = MockIndexDataset(dataset_length)
     sampler = FixedLengthSampler(dataset, num_samples=num_samples, shuffled=True)
-    loader_params = {'batch_size': 1, 'num_workers': num_workers, 'drop_last': False, 'sampler': sampler}
+    loader_params = {
+        "batch_size": 1,
+        "num_workers": num_workers,
+        "drop_last": False,
+        "sampler": sampler,
+    }
     dataloader = DataLoader(dataset, **loader_params)
     indexes = read_dataloader(dataloader)
     check_index_repetition(indexes, dataset_length)
@@ -121,7 +136,12 @@ def test_shuffled_batched():
     batch_size = 2
     dataset = MockIndexDataset(dataset_length)
     sampler = FixedLengthSampler(dataset, num_samples=8, shuffled=True)
-    loader_params = {'batch_size': batch_size, 'num_workers': num_workers, 'drop_last': True, 'sampler': sampler}
+    loader_params = {
+        "batch_size": batch_size,
+        "num_workers": num_workers,
+        "drop_last": True,
+        "sampler": sampler,
+    }
     dataloader = DataLoader(dataset, **loader_params)
     index_batches = read_dataloader(dataloader)
     # Note drop_last == True ensures we only get full batches back

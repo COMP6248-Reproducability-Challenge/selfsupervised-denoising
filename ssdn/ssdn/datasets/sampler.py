@@ -48,7 +48,7 @@ class FixedLengthSampler(Sampler):
         if self.shuffled:
             while remaining > 0:
                 n = min(remaining, len(self.data_source))
-                for idx in torch.randperm(len(self.data_source))[0 : n]:
+                for idx in torch.randperm(len(self.data_source))[0:n]:
                     yield int(idx)
                 remaining -= n
         else:

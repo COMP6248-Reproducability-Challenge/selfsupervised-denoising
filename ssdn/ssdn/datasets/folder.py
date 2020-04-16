@@ -64,8 +64,9 @@ class UnlabelledImageFolderDataset(Dataset):
         # Convert to tensor if this hasn't be done during the transform
         if not isinstance(img, torch.Tensor):
             img = F.to_tensor(img)
-        nt = NoiseTransform('gauss50')
-        return (nt(img), nt(img))
+        # TODO: Remove this noise application from here
+        nt = NoiseTransform("gauss20")
+        return (nt(img), img)
 
     def __len__(self):
         return len(self.files)
