@@ -2,6 +2,7 @@
 """
 
 import torch
+import ssdn
 
 from torch import Tensor
 from torch.distributions import Uniform, Poisson
@@ -64,7 +65,10 @@ def add_gaussian(
             std_dev = uniform_generator.sample((tensor.shape[0], 1, 1, 1))
     if isinstance(std_dev, int):
         std_dev = std_dev / 255
-    return tensor.add_(torch.randn(tensor.size()) * std_dev + mean), std_dev
+    tensor = tensor.add_(torch.randn(tensor.size()) * std_dev + mean)
+    tensor = ssdn.utils.clip_img(tensor, inplace=True)
+
+    return tensor, std_dev
 
 
 def add_poisson(
@@ -102,6 +106,8 @@ def add_poisson(
     noise = poisson_generator.sample(tensor.shape)
     tensor.add_(noise)
     tensor.div_(lam)
+    tensor = ssdn.utils.clip_img(tensor, inplace=True)
+
     return tensor, lam
 
 

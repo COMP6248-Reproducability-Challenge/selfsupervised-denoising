@@ -4,10 +4,11 @@
 __authors__ = "David Jones <dsj1n15@ecs.soton.ac.uk>"
 
 import numpy as np
+import torch
 
 from nptyping import Array
 from numbers import Number
-
+from torch import Tensor
 
 def set_color_channels(x: Array[Number], num_channels: int):
     # ## FROM NVIDIA SOURCE ## #
@@ -43,6 +44,16 @@ def compute_ramped_lrate(
             learning_rate = learning_rate * (0.5 + np.cos(t * np.pi) / 2) ** 2
 
     return learning_rate
+
+
+def clip_img(img: Tensor, inplace: bool = False) -> Tensor:
+    if not inplace:
+        img = img.clone()
+    if img.is_floating_point():
+        c_min, c_max = (0, 1)
+    else:
+        c_min, c_max = (0, 255)
+    return torch.clamp_(img, c_min, c_max)
 
 
 if __name__ == "__main__":
