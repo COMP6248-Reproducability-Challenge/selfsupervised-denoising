@@ -41,7 +41,7 @@ DEFAULT_CFG = {
     ConfigValue.LEARNING_RATE: 3e-4,
     ConfigValue.LR_RAMPDOWN_FRACTION: 0.1,
     ConfigValue.LR_RAMPUP_FRACTION: 0.3,
-    ConfigValue.EVAL_INTERVAL: 1
+    ConfigValue.EVAL_INTERVAL: 50
 }
 
 
@@ -64,13 +64,16 @@ def mse2psnr(mse: Tensor, float_imgs: bool = True):
 
 class Denoiser:
     def __init__(self, cfg=DEFAULT_CFG):
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
         self.cfg = cfg
         self.state = {}
-        self.denoise_net = Noise2Noise()
+        self.denoise_net = Noise2Noise().to(self.device)
         self.param_estimation_net = None
         # Dataloaders
-        self.loss_fn = nn.MSELoss(reduction="none")
+        self.loss_fn = nn.MSELoss(reduction="mean")
         self._optimizer = optim.Adam(self.denoise_net.parameters(), betas=[0.9, 0.99])
+        
 
     def train(self, trainloader: DataLoader, testloader: DataLoader = None):
 
@@ -87,7 +90,7 @@ class Denoiser:
             data, indexes = next(iter(trainloader))
             outputs = self.run_pipeline(data, True)
             prog_bar.update()
-            self.state[StateValue.ITERATION] += 1
+            self.state[StateValue.ITERATION] += 1 # actual batch size
             if (
                 testloader is not None
                 and (self.state[StateValue.ITERATION]
@@ -100,15 +103,17 @@ class Denoiser:
             outputs = self.run_pipeline(data, testloader)
             (dirty, _), (reference, _) = outputs[PipelineOutput.INPUTS]
 
-            cleaned = outputs[PipelineOutput.IMG_DENOISED]
+            cleaned = outputs[PipelineOutput.IMG_DENOISED].cpu()
             joined = torch.cat((dirty, cleaned, reference), axis=3)
-            joined = joined.detach().numpy()[0]
-            joined = np.clip(joined, 0, 1)
-            joined = joined.transpose(1, 2, 0)
-            # psnr = 20 * math.log10(1) - 10 * math.log10(mse)
-            # print("{},{},{}".format(i, mse, psnr))
-            im = Image.fromarray(np.uint8(joined * 255))
-            im.save("results/{}.jpeg".format(indexes[0]))
+            joined = joined.detach().numpy()
+            for i in range(joined.shape[0]):
+                single_joined = joined[i]
+                # joined = np.clip(joined, 0, 1)
+                single_joined = single_joined.transpose(1, 2, 0)
+                # psnr = 20 * math.log10(1) - 10 * math.log10(mse)
+                # print("{},{},{}".format(i, mse, psnr))
+                im = Image.fromarray(np.uint8(single_joined * 255))
+                im.save("results/{}.jpeg".format(indexes[i]))
 
     def run_pipeline(self, data: Tensor, train: bool, **kwargs):
         if self.cfg[ConfigValue.BLINDSPOT]:
@@ -122,17 +127,19 @@ class Denoiser:
     def _simple_pipeline(self, data: Tensor, train: bool, **kwargs):
         inputs = self.prepare_input(data)
         (inp, _), (ref, _) = inputs
-
+        inp = inp.to(self.device)
+        ref = ref.to(self.device)
         if train:
             inp.requires_grad = True
             ref.requires_grad = True
 
         cleaned = self.denoise_net(inp)
         loss = self.loss_fn(inp, ref)
-        loss = loss.view(loss.shape[0], -1).mean(1, keepdim=True)
+        # loss = loss.view(loss.shape[0], -1).mean(1, keepdim=True)
         if train:
             self.optimizer.zero_grad()
-            torch.mean(loss).backward()
+            loss.backward()
+            # torch.mean(loss).backward()
             self.optimizer.step()
 
         return {
@@ -140,9 +147,6 @@ class Denoiser:
             PipelineOutput.IMG_DENOISED: cleaned,
             PipelineOutput.LOSS: loss,
         }
-
-    def get_next_training(self):
-        pass
 
     @property
     def optimizer(self) -> Optimizer:
@@ -153,8 +157,8 @@ class Denoiser:
             self.cfg[ConfigValue.LR_RAMPUP_FRACTION],
             self.cfg[ConfigValue.LEARNING_RATE],
         )
-        for param_group in self._optimizer.param_groups:
-            param_group["lr"] = learning_rate
+        # for param_group in self._optimizer.param_groups:
+        #     param_group["lr"] = learning_rate
         return self._optimizer
 
     def prepare_input(
@@ -187,18 +191,19 @@ class Denoiser:
 def train_noise2noise():
 
     transform = Compose([RandomCrop(256, pad_if_needed=True)])
-    transform
+    dataset_dir = "C:/Scratch/COMP6202-DL-Reproducibility-Challenge/BSDS300/images/"
     training_dataset = UnlabelledImageFolderDataset(
-        "C:/dsj/deep_learning/coursework/git/BSDS300/images/train/", transform=transform
+        os.path.join(dataset_dir, "train/"), transform=transform
     )
     test_dataset = UnlabelledImageFolderDataset(
-        "C:/dsj/deep_learning/coursework/git/BSDS300/images/test/", transform=transform
+        os.path.join(dataset_dir, "test/"), transform=transform
     )
     loader_params = {
-        "batch_size": 1,
+        "batch_size": 4,
         "num_workers": 1,
+        "pin_memory": True
     }
-    sampler = FixedLengthSampler(training_dataset, num_samples=100, shuffled=False)
+    sampler = FixedLengthSampler(training_dataset, num_samples=1000, shuffled=False)
     trainloader = DataLoader(training_dataset, sampler=sampler, **loader_params)
     sampler = FixedLengthSampler(test_dataset, num_samples=5, shuffled=False)
     testloader = DataLoader(test_dataset, sampler=sampler, **loader_params)
@@ -218,10 +223,7 @@ def train_noise2noise():
 
     # build the model
     model = Noise2Noise()
-    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
-    params = sum([np.prod(p.size()) for p in model_parameters])
-    print(params)
-    exit()
+
     # define the loss function and the optimizer
     # TODO need to use signal-to-noise ratio somewhere?
     loss_function = nn.MSELoss()
