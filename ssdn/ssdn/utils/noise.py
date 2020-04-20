@@ -9,19 +9,6 @@ from torch.distributions import Uniform, Poisson
 from numbers import Number
 from typing import Union, Tuple
 
-operation_seed_counter = 0
-
-
-def get_seed():
-    global operation_seed_counter
-    operation_seed_counter += 1
-    return operation_seed_counter
-
-
-def set_seed(seed: int):
-    global operation_seed_counter
-    operation_seed_counter = seed
-
 
 def add_gaussian(
     tensor: Tensor,
@@ -50,7 +37,6 @@ def add_gaussian(
     if not inplace:
         tensor = tensor.clone()
 
-    torch.manual_seed(get_seed())
     if isinstance(std_dev, (list, tuple)):
         if len(std_dev) == 1:
             std_dev = std_dev[0]
@@ -92,7 +78,6 @@ def add_poisson(
     if not inplace:
         tensor = tensor.clone()
 
-    torch.manual_seed(get_seed())
     if isinstance(lam, (list, tuple)):
         if len(lam) == 1:
             lam = lam[0]
