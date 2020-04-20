@@ -3,6 +3,7 @@ from enum import Enum, auto
 
 class NoiseAlgorithm(Enum):
     SELFSUPERVISED_DENOISING = "ssdn"
+    SELFSUPERVISED_DENOISING_MEAN_ONLY = "ssdn_u_only"
     NOISE_TO_NOISE = "n2n"
     NOISE_TO_CLEAN = "n2c"
     NOISE_TO_VOID = "n2v"  # Unsupported

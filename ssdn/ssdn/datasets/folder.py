@@ -64,7 +64,15 @@ class UnlabelledImageFolderDataset(Dataset):
         # Convert to tensor if this hasn't be done during the transform
         if not isinstance(img, torch.Tensor):
             img = F.to_tensor(img)
-        return (img, index)
+        return img, index
+
 
     def __len__(self):
         return len(self.files)
+
+class NoisyUnlabelledImageFolderDataset(UnlabelledImageFolderDataset):
+
+    def __getitem__(self, index: int):
+        (img, index) = super().__getitem__(index)
+        nt = NoiseTransform("gauss0")
+        return (nt(img), img)

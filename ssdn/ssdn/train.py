@@ -11,6 +11,7 @@ import time
 
 from torchvision.transforms import Compose, RandomCrop, ToTensor
 from ssdn.datasets import UnlabelledImageFolderDataset, FixedLengthSampler
+from ssdn.datasets.folder import NoisyUnlabelledImageFolderDataset
 from ssdn.models.noise2noise import Noise2Noise
 
 from torch.utils.data import DataLoader
@@ -30,13 +31,15 @@ from typing import Tuple, Union
 from numbers import Number
 
 from tqdm import tqdm
+from ssdn.models.blindspot import NoiseNetwork
+
 
 DEFAULT_CFG = {
     ConfigValue.TRAINING_ITERATIONS: 1000,
-    ConfigValue.MINIBATCH_SIZE: 1,
+    ConfigValue.MINIBATCH_SIZE: 4,
     ConfigValue.BLINDSPOT: False,
     ConfigValue.ALGORITHM: NoiseAlgorithm.NOISE_TO_CLEAN,
-    ConfigValue.NOISE_STYLE: "gauss50",
+    ConfigValue.NOISE_STYLE: "gauss0",
     ConfigValue.TRAINING_PATCH_SIZE: 256,
     ConfigValue.LEARNING_RATE: 3e-4,
     ConfigValue.LR_RAMPDOWN_FRACTION: 0.1,
@@ -45,21 +48,13 @@ DEFAULT_CFG = {
 }
 
 
-def show_chw():
-    pass
-
-
-def calculate_psnr(img: Tensor, ref: Tensor, axis: int = None):
-    a, b = [clip_img(x) for x in [img, ref]]
-    a, b = [tf.cast(x, tf.float32) for x in [a, b]]
-    x = tf.reduce_mean((a - b) ** 2, axis=axis)
-    high_val = 1.0 if img.is_floating_point() else 255
-    return 20 * torch.log10(high_val) - 10 * torch.log10(mse)
-
-
 def mse2psnr(mse: Tensor, float_imgs: bool = True):
     high_val = torch.tensor(1.0) if float_imgs else torch.tensor(255)
     return 20 * torch.log10(high_val) - 10 * torch.log10(mse)
+
+def calculate_psnr(img: Tensor, ref: Tensor, axis: int = None):
+    mse = F.reduce_mean((img - ref) ** 2, axis=axis)
+    return mse2psnr(mse, img.is_floating_point())
 
 
 class Denoiser:
@@ -68,12 +63,13 @@ class Denoiser:
 
         self.cfg = cfg
         self.state = {}
-        self.denoise_net = Noise2Noise().to(self.device)
+        self.denoise_net = NoiseNetwork(blindspot=True).to(self.device)
+
         self.param_estimation_net = None
         # Dataloaders
-        self.loss_fn = nn.MSELoss(reduction="mean")
+        self.loss_fn = nn.MSELoss(reduction="none")
         self._optimizer = optim.Adam(self.denoise_net.parameters(), betas=[0.9, 0.99])
-        
+
 
     def train(self, trainloader: DataLoader, testloader: DataLoader = None):
 
@@ -100,7 +96,7 @@ class Denoiser:
 
     def evaluate(self, testloader: DataLoader):
         for data, indexes in testloader:
-            outputs = self.run_pipeline(data, testloader)
+            outputs = self.run_pipeline(data, False)
             (dirty, _), (reference, _) = outputs[PipelineOutput.INPUTS]
 
             cleaned = outputs[PipelineOutput.IMG_DENOISED].cpu()
@@ -109,8 +105,8 @@ class Denoiser:
             for i in range(joined.shape[0]):
                 single_joined = joined[i]
                 # joined = np.clip(joined, 0, 1)
-                single_joined = single_joined.transpose(1, 2, 0)
                 # psnr = 20 * math.log10(1) - 10 * math.log10(mse)
+                single_joined = single_joined.transpose(1, 2, 0)
                 # print("{},{},{}".format(i, mse, psnr))
                 im = Image.fromarray(np.uint8(single_joined * 255))
                 im.save("results/{}.jpeg".format(indexes[i]))
@@ -134,12 +130,24 @@ class Denoiser:
             ref.requires_grad = True
 
         cleaned = self.denoise_net(inp)
-        loss = self.loss_fn(inp, ref)
-        # loss = loss.view(loss.shape[0], -1).mean(1, keepdim=True)
+        # inp = inp[0].detach().numpy().transpose(1, 2, 0)
+        # ref = ref[0].detach().numpy().transpose(1, 2, 0)
+        # cleaned = cleaned[0].detach().numpy().transpose(1, 2, 0)
+
+        # im = Image.fromarray(np.uint8(inp * 255))
+        # im.show()
+        # im = Image.fromarray(np.uint8(ref * 255))
+        # im.show()
+        # im = Image.fromarray(np.uint8(cleaned * 255))
+        # im.show()
+        # exit()
+
+        loss = self.loss_fn(cleaned, ref)
+        loss = loss.view(loss.shape[0], -1).mean(1, keepdim=True)
         if train:
             self.optimizer.zero_grad()
-            loss.backward()
-            # torch.mean(loss).backward()
+            # loss.backward()
+            torch.mean(loss).backward()
             self.optimizer.step()
 
         return {
@@ -184,14 +192,16 @@ class Denoiser:
         # SSDN requires noisy input and no reference images
         if self.cfg[ConfigValue.ALGORITHM] == NoiseAlgorithm.SELFSUPERVISED_DENOISING:
             return ((noisy_in, noisy_in_coeff), None)
-
+        if self.cfg[ConfigValue.ALGORITHM] == NoiseAlgorithm.SELFSUPERVISED_DENOISING_MEAN_ONLY:
+            return ((noisy_in, noisy_in_coeff), (noisy_in, noisy_in_coeff))
         raise NotImplementedError("Denoising algorithm not supported")
 
 
 def train_noise2noise():
+    torch.backends.cudnn.deterministic = True
 
     transform = Compose([RandomCrop(256, pad_if_needed=True)])
-    dataset_dir = "C:/Scratch/COMP6202-DL-Reproducibility-Challenge/BSDS300/images/"
+    dataset_dir = r"C:\dsj\deep_learning\coursework\git/BSDS300/images/"
     training_dataset = UnlabelledImageFolderDataset(
         os.path.join(dataset_dir, "train/"), transform=transform
     )
@@ -199,30 +209,87 @@ def train_noise2noise():
         os.path.join(dataset_dir, "test/"), transform=transform
     )
     loader_params = {
-        "batch_size": 4,
-        "num_workers": 1,
+        "batch_size": 1,
+        "num_workers": 4,
         "pin_memory": True
     }
-    sampler = FixedLengthSampler(training_dataset, num_samples=1000, shuffled=False)
+    sampler = FixedLengthSampler(training_dataset, num_samples=8, shuffled=False)
     trainloader = DataLoader(training_dataset, sampler=sampler, **loader_params)
-    sampler = FixedLengthSampler(test_dataset, num_samples=5, shuffled=False)
+    sampler = FixedLengthSampler(test_dataset, num_samples=1, shuffled=False)
     testloader = DataLoader(test_dataset, sampler=sampler, **loader_params)
 
     # fix random seed for reproducibility
-    seed = 7
+    seed = 0
     torch.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
 
-    denoiser = Denoiser()
-    denoiser.train(trainloader, testloader=testloader)
-    exit()
-    for (data, indexes) in trainloader:
-        (inp, inp_coeffs), (ref, ref_coeffs) = denoiser.prepare_input(data)
-        print(inp_coeffs, ref_coeffs)
-        exit()
+    # model = NoiseNetwork(blindspot=True)
+    # for (image, indexes) in trainloader:
+    #     cleaned = model(image)
+    #     cleaned = cleaned.detach().numpy()[0]
+    #     cleaned = cleaned.transpose(1, 2, 0)
+    #     im = Image.fromarray(np.uint8(cleaned * 255))
+    #     im.show()
+    #     exit()
+    
+    # dirty, reference = next(iter(testloader))
+    # cleaned = model2(dirty)
+
+    # joined = torch.cat((dirty, cleaned, reference), axis=3)
+    # joined = joined.detach().numpy()[0]
+    # joined = np.clip(joined, 0, 1)
+    # joined = joined.transpose(1, 2, 0)
+
+    # im = Image.fromarray(np.uint8(joined * 255))
+    # im.show()
+    # print(model.conv.weight)
+    # exit()
+
+    seed = 0
+    torch.manual_seed(seed)
+
+    # denoiser = Denoiser()
+    # t1 = time.time()
+    # denoiser.train(trainloader)
+    # print("\n", time.time() - t1, "\n")
+    # # print(weights_b - weights_a)
+    # model = denoiser.denoise_net
+    # dirty, _ = next(iter(testloader))
+    # cleaned = model(dirty)
+
+    # joined = torch.cat((dirty, cleaned), axis=3)
+    # joined = joined.detach().numpy()[0]
+    # joined = np.clip(joined, 0, 1)
+    # joined = joined.transpose(1, 2, 0)
+
+    # im = Image.fromarray(np.uint8(joined * 255))
+    # im.show()
+
+
+
+    training_dataset = NoisyUnlabelledImageFolderDataset(
+        os.path.join(dataset_dir, "train/"), transform=transform
+    )
+    test_dataset = NoisyUnlabelledImageFolderDataset(
+        os.path.join(dataset_dir, "test/"), transform=transform
+    )
+    sampler = FixedLengthSampler(training_dataset, num_samples=100, shuffled=True)
+    trainloader = DataLoader(training_dataset, sampler=sampler, **loader_params)
+    sampler = FixedLengthSampler(test_dataset, num_samples=1, shuffled=False)
+    testloader = DataLoader(test_dataset, sampler=sampler, **loader_params)
+
+
+    # denoiser.evaluate(testloader)
+    # exit()
 
     # build the model
-    model = Noise2Noise()
+    model = NoiseNetwork(blindspot=False)
+    # cleaned = model(next(iter(testloader))[0])
+    # cleaned = cleaned[0].detach().numpy().transpose(1, 2, 0)
+    # im = Image.fromarray(np.uint8(cleaned * 255))
+    # im.show()
+
+    # exit()
 
     # define the loss function and the optimizer
     # TODO need to use signal-to-noise ratio somewhere?
@@ -237,36 +304,45 @@ def train_noise2noise():
         period=1,
         on_batch=False,
     )  # t == BATCH
-    models = glob.glob(os.path.join(model_dir, "*.weights"))
-    # models = sorted(models, key=lambda x: os.path.basename(x).split(".weights")[0])
+
     trial = Trial(
         model,
         optimizer,
         loss_function,
-        callbacks=[checkpointer],
+        # callbacks=[checkpointer],
         metrics=["loss"],
         verbose=2,
     ).to(device)
+
+
+    # Load existing model
+    models = glob.glob(os.path.join(model_dir, "*.weights"))
     if True and len(models) > 0:
         model_path = models[-1]
         state_dict = torch.load(model_path, map_location=device)
         trial.load_state_dict(state_dict)
         print("Loaded: ", model_path)
-    trial.with_generators(trainloader, val_generator=testloader)
+    trial.with_generators(trainloader) # , val_generator=testloader
+    
+    t1 = time.time()
     trial.run(epochs=1)
+    print("\n", time.time() - t1, "\n")
+
     # results = trial.evaluate(data_key=torchbearer.TEST_DATA)
     mse_model = nn.MSELoss()
     os.makedirs("results", exist_ok=True)
     for i, (dirty, reference) in enumerate(testloader):
         cleaned = model.forward(dirty.to(device)).cpu()
-        mse = mse_model(cleaned, reference)
         joined = torch.cat((dirty, cleaned, reference), axis=3)
         joined = joined.detach().numpy()[0]
         joined = np.clip(joined, 0, 1)
         joined = joined.transpose(1, 2, 0)
+
+        mse = mse_model(cleaned, reference)
         psnr = 20 * math.log10(1) - 10 * math.log10(mse)
         print("{},{},{}".format(i, mse, psnr))
         im = Image.fromarray(np.uint8(joined * 255))
+        im.show()
         im.save("results/{}.jpeg".format(i))
 
 
