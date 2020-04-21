@@ -4,23 +4,22 @@ import ssdn
 from torch import Tensor
 
 from torch.utils.data import Dataset
-from ssdn.params import NoiseAlgorithm, Metadata
+from ssdn.params import NoiseAlgorithm
 
 from enum import Enum, auto
 from typing import Union, Dict, Tuple
 from numbers import Number
 
 
-class NoisyDatasetMetadata(Enum):
-    INDEXES = auto()
-    INPUT_NOISE_VALUES = auto()
-    REFERENCE_NOISE_VALUES = auto()
-
-
 class NoisyDataset(Dataset):
     INPUT = 0
     REFERENCE = 1
     METADATA = 2
+
+    class Metadata(Enum):
+        INDEXES = auto()
+        INPUT_NOISE_VALUES = auto()
+        REFERENCE_NOISE_VALUES = auto()
 
     def __init__(
         self,
@@ -41,7 +40,7 @@ class NoisyDataset(Dataset):
         if self.enable_metadata:
             # Create metadata object
             metadata = {}
-            metadata[Metadata.INDEXES] = index
+            metadata[NoisyDataset.Metadata.INDEXES] = index
         else:
             metadata = None
         # Noisify and create appropriate reference
@@ -83,7 +82,11 @@ class NoisyDataset(Dataset):
 
         # Fill metdata dictionary
         if metadata is not None:
-            metadata[Metadata.INPUT_NOISE_VALUES] = broadcast_coeffs(inp, inp_coeff)
-            metadata[Metadata.REFERENCE_NOISE_VALUES] = broadcast_coeffs(ref, ref_coeff)
+            metadata[NoisyDataset.Metadata.INPUT_NOISE_VALUES] = broadcast_coeffs(
+                inp, inp_coeff
+            )
+            metadata[NoisyDataset.Metadata.REFERENCE_NOISE_VALUES] = broadcast_coeffs(
+                ref, ref_coeff
+            )
 
         return (inp, ref, metadata)
