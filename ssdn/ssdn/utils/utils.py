@@ -5,6 +5,7 @@ __authors__ = "David Jones <dsj1n15@ecs.soton.ac.uk>"
 
 import numpy as np
 import torch
+import torch.functional as F
 
 from nptyping import Array
 from numbers import Number
@@ -98,3 +99,12 @@ def rotate(
         return x.transpose(h_dim, w_dim)
     else:
         raise NotImplementedError("Must be rotation divisible by 90 degrees")
+
+def mse2psnr(mse: Tensor, float_imgs: bool = True):
+    high_val = torch.tensor(1.0) if float_imgs else torch.tensor(255)
+    return 20 * torch.log10(high_val) - 10 * torch.log10(mse)
+
+
+def calculate_psnr(img: Tensor, ref: Tensor, axis: int = None):
+    mse = F.reduce_mean((img - ref) ** 2, axis=axis)
+    return mse2psnr(mse, img.is_floating_point())

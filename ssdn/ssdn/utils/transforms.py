@@ -12,5 +12,5 @@ class NoiseTransform(object):
         self.style = style
 
     def __call__(self, imgs):
-        imgs, params = ssdn.utils.noise.add_style(imgs, self.style)
+        imgs, _ = ssdn.utils.noise.add_style(imgs, self.style)
         return imgs
