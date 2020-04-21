@@ -1,8 +1,6 @@
 import torch
+import ssdn
 import torch.nn as nn
-import torch.nn.functional as F
-
-# from ssdn.models.shift_conv2d import ShiftConv2d
 
 
 class ShiftConv2d(nn.Conv2d):
@@ -18,17 +16,20 @@ class ShiftConv2d(nn.Conv2d):
             x = x[:, :, : -self.shift_size, :]
         return x
 
+
 class Crop2d(nn.Module):
     def __init__(self, crop):
         super().__init__()
         self.crop = crop
         # Assume BCHW
-        assert(len(crop) == 4)
+        assert len(crop) == 4
+
     def forward(self, x):
         (left, right, top, bottom) = self.crop
         x0, x1 = left, x.shape[-1] - right
         y0, y1 = top, x.shape[-2] - bottom
         return x[:, :, y0:y1, x0:x1]
+
 
 class NoiseNetwork(nn.Module):
     """Custom U-Net architecture for Noise2Noise (see Appendix, Table 2).
@@ -100,10 +101,7 @@ class NoiseNetwork(nn.Module):
         )
 
         if self.blindspot:
-            self.shift = nn.Sequential(
-                nn.ZeroPad2d((0, 0, 1, 0)),
-                Crop2d((0, 0, 0, 1))
-            )
+            self.shift = nn.Sequential(nn.ZeroPad2d((0, 0, 1, 0)), Crop2d((0, 0, 0, 1)))
             nin_a_io = 384
         else:
             nin_a_io = 96
@@ -131,7 +129,7 @@ class NoiseNetwork(nn.Module):
 
     def forward(self, x):
         if self.blindspot:
-            rotated = [self.rotate(x, rot) for rot in (0, 90, 180, 270)]
+            rotated = [ssdn.utils.rotate(x, rot) for rot in (0, 90, 180, 270)]
             x = torch.cat((rotated), dim=0)
 
         # Encoder
@@ -159,29 +157,12 @@ class NoiseNetwork(nn.Module):
             shifted = self.shift(x)
             # Unstack, rotate and combine
             rotated_batch = torch.chunk(shifted, 4, dim=0)
-            aligned = [self.rotate(rotated, rot) for rotated, rot in zip(rotated_batch, (0, 270, 180, 90))]
+            aligned = [
+                ssdn.utils.rotate(rotated, rot)
+                for rotated, rot in zip(rotated_batch, (0, 270, 180, 90))
+            ]
             x = torch.cat(aligned, dim=1)
 
         x = self._block7(x)
 
         return x
-
-
-    def rotate(self, x: torch.Tensor, angle: int) -> torch.Tensor:
-        """Rotate images in BCHW format by 90 degrees clockwise.
-        Args:
-            x (Tensor): Images in BHCW format.
-            angle (int): Clockwise rotation angle in multiples of 90.
-        Returns:
-            Tensor: Copy of tensor with rotation applied.
-        """
-        if angle == 0:
-            return x
-        elif angle == 90:
-            return x.transpose(-2, -1).flip(-1)
-        elif angle == 180:
-            return x.flip(-2)
-        elif angle == 270:
-            return x.transpose(-2, -1)
-        else:
-            raise NotImplementedError("Must be rotation divisible by 90 degrees")

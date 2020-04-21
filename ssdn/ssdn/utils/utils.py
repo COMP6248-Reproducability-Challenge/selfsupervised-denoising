@@ -10,6 +10,9 @@ from nptyping import Array
 from numbers import Number
 from torch import Tensor
 
+from ssdn.utils.data_format import DataFormat, DataDim, DATA_FORMAT_DIMS
+
+
 def set_color_channels(x: Array[Number], num_channels: int):
     # ## FROM NVIDIA SOURCE ## #
     assert x.shape[0] in [1, 3, 4]
@@ -47,6 +50,19 @@ def compute_ramped_lrate(
 
 
 def clip_img(img: Tensor, inplace: bool = False) -> Tensor:
+    """Clip tensor data so that it is within a valid image range. That is
+    between 0-1 for float images and 0-255 for int images. Values are clamped
+    meaning any values outside this range are set to the limits, other values
+    are not touched.
+
+    Args:
+        img (Tensor): Image or batch of images to clip.
+        inplace (bool, optional): Whether to do the operation in place.
+            Defaults to False; this will first clone the data.
+
+    Returns:
+        Tensor: Reference to input image or new image.
+    """
     if not inplace:
         img = img.clone()
     if img.is_floating_point():
@@ -56,14 +72,29 @@ def clip_img(img: Tensor, inplace: bool = False) -> Tensor:
     return torch.clamp_(img, c_min, c_max)
 
 
-if __name__ == "__main__":
-    learning_rate = 3e-4
-    rampup_fraction = 0.1
-    rampdown_fraction = 0.3
-    num_iter = 100
-    minibatch_size = 2
-    for n in range(0, num_iter + minibatch_size, minibatch_size):
-        lr = compute_ramped_lrate(
-            n, num_iter, rampup_fraction, rampdown_fraction, learning_rate
-        )
-        print(lr)
+def rotate(
+    x: torch.Tensor, angle: int, data_format: str = DataFormat.BCHW
+) -> torch.Tensor:
+    """Rotate images by 90 degrees clockwise. Can handle any 2D data format.
+    Args:
+        x (Tensor): Image or batch of images.
+        angle (int): Clockwise rotation angle in multiples of 90.
+        data_format (str, optional): Format of input image data, e.g. BCHW,
+            HWC. Defaults to BCHW.
+    Returns:
+        Tensor: Copy of tensor with rotation applied.
+    """
+    dims = DATA_FORMAT_DIMS[data_format]
+    h_dim = dims[DataDim.HEIGHT]
+    w_dim = dims[DataDim.WIDTH]
+
+    if angle == 0:
+        return x
+    elif angle == 90:
+        return x.transpose(h_dim, w_dim).flip(w_dim)
+    elif angle == 180:
+        return x.flip(h_dim)
+    elif angle == 270:
+        return x.transpose(h_dim, w_dim)
+    else:
+        raise NotImplementedError("Must be rotation divisible by 90 degrees")
