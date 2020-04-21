@@ -15,6 +15,10 @@ class NoiseValue(Enum):
     KNOWN_PER_IMAGE = "known_per_image"
 
 
+class Pipeline(Enum):
+    MSE = auto()
+    SSDN = auto()
+
 class ConfigValue(Enum):
     ALGORITHM = auto()
     BLINDSPOT = auto()
@@ -32,19 +36,6 @@ class ConfigValue(Enum):
     EVAL_INTERVAL = auto()
     PRINT_INTERVAL = auto()
     TRAINING_ITERATIONS = auto()
-
-
-        #   train_dataset         = None,
-        #   validation_dataset    = None,
-        #   validation_repeats    = 1,
-        #   prune_dataset         = None,
-        #   num_channels          = None,
-        #   print_interval        = 1000,
-        #   eval_interval         = 10000,
-        #   eval_network          = None,
-        #   config_name           = None,
-        #   dataset_dir           = None):
-
 
 
 class StateValue(Enum):
