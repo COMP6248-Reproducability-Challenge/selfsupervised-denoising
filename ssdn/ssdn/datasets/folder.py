@@ -46,7 +46,6 @@ def case_insensitive_extensions(extensions: List[str]) -> List[str]:
             not be preserved. If the file system is not case sensitive the original list
             is returned untouched.
     """
-
     def mp(char: str) -> str:
         if char not in string.ascii_letters:
             return char
@@ -57,7 +56,7 @@ def case_insensitive_extensions(extensions: List[str]) -> List[str]:
     if is_fs_case_sensitive():
         cs_extensions = []
         for extension in extensions:
-            cs_extensions += [str(map(mp, extension))]
+            cs_extensions += ["".join(map(mp, extension))]
         extensions = cs_extensions
     # Remove duplicates
     return list(set(extensions))
