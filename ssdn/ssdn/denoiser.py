@@ -13,7 +13,7 @@ from ssdn.params import (
     StateValue,
     NoiseAlgorithm,
     PipelineOutput,
-    Pipeline
+    Pipeline,
 )
 from ssdn.models.blindspot import NoiseNetwork
 from ssdn.datasets import NoisyDataset
@@ -21,22 +21,59 @@ from ssdn.datasets import NoisyDataset
 from typing import Dict
 from tqdm import tqdm
 
+
 class Denoiser:
 
-    def __init__(self, cfg: Dict):
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    MODEL = "denoiser_model"
+    PARAM_ESTIMATION = "param_estimation_model"
 
+    def __init__(self, cfg: Dict, device: str = None):
+
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.cfg = cfg
         self.state = {}
-        self.denoise_net = NoiseNetwork(blindspot=cfg[ConfigValue.BLINDSPOT])
-        self.param_estimation_net = None
-        # Dataloaders
-        self.loss_fn = nn.MSELoss(reduction="mean")
-        self._optimizer = optim.Adam(self.denoise_net.parameters(), betas=[0.9, 0.99])
 
-        for network in [self.denoise_net, self.param_estimation_net]:
-            if network is not None:
-                network.to(self.device)
+        # References to models that are guaranteed to be device independent
+        self._models = nn.ModuleDict()
+        # Models to use during training, these can be parallelised
+        self.models = nn.ModuleDict()
+        self.init_networks()
+
+    def get_model(self, model_id: str, parallelised: bool = True) -> nn.Module:
+        model_dict = self.models if parallelised else self._models
+        return model_dict[model_id]
+
+    def add_model(self, model_id: str, model: nn.Module, parallelise: bool = True):
+        self._models[model_id] = model
+        if parallelise:
+            parallel_model = nn.DataParallel(model)
+        else:
+            parallel_model = model
+        # Move to master device (GPU 0 or CPU)
+        parallel_model.to(self.device)
+        self.models[model_id] = parallel_model
+
+    def init_networks(self):
+        # Create general denoising model
+        self.add_model(
+            Denoiser.MODEL, NoiseNetwork(blindspot=self.cfg[ConfigValue.BLINDSPOT])
+        )
+        # Create separate model for parameter estimation
+        if self.cfg[ConfigValue.PIPELINE] == Pipeline.SSDN:
+            # TODO: Do we need to add a flag for zeroing last set of biases
+            self.add_model(
+                Denoiser.PARAM_ESTIMATION, NoiseNetwork(out_channels=1, blindspot=False)
+            )
+        # Refresh optimiser for new network parameters
+        self.init_optimiser()
+
+    def init_optimiser(self):
+        self._optimizer = optim.Adam(self.models.parameters(), betas=[0.9, 0.99])
+
+    def eval(self):
+        self.models.eval()
+        # for model in self.models.values():
+        #     self.network.eval()
 
     def train(self, trainloader: DataLoader, testloader: DataLoader = None):
         if StateValue.ITERATION not in self.state:
@@ -99,20 +136,20 @@ class Denoiser:
         inp, ref = inp.to(self.device), ref.to(self.device)
 
         if train:
-            self.optimizer.zero_grad()
+            optimizer = self.optimizer
+            optimizer.zero_grad()
             inp.requires_grad = True
             ref.requires_grad = True
 
-        cleaned = self.denoise_net(inp)
-        loss = self.loss_fn(cleaned, ref)
-        # Reduce to batch losses if not already reduced
-        if len(loss.shape) > 0:
-            loss = loss.view(loss.shape[0], -1).mean(1, keepdim=True)
+        cleaned = self.models[Denoiser.MODEL](inp)
+        # Do MSE but preserve individual loss per batch
+        loss = nn.MSELoss(reduction="none")(cleaned, ref)
+        loss = loss.view(loss.shape[0], -1).mean(1, keepdim=True)
 
         if train:
-            # Train using a single loss
+            # Train using average loss across batch
             torch.mean(loss).backward()
-            self.optimizer.step()
+            optimizer.step()
 
         return {
             PipelineOutput.INPUTS: data,
@@ -132,3 +169,15 @@ class Denoiser:
         for param_group in self._optimizer.param_groups:
             param_group["lr"] = learning_rate
         return self._optimizer
+
+    def save(self):
+        raise NotImplementedError()
+
+    def load(self):
+        raise NotImplementedError()
+
+    # def eval(self):
+    #     raise NotImplementedError()
+
+    # def train(self):
+    #     raise NotImplementedError()
