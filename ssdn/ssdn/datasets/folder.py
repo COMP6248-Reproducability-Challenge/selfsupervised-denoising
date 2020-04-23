@@ -10,8 +10,10 @@ import tempfile
 import string
 
 from ssdn.utils.transforms import Transform
+from ssdn.utils.data_format import DataFormat, PIL_FORMAT, permute_tuple
 from torch.utils.data import Dataset
 from torchvision.datasets.folder import default_loader, IMG_EXTENSIONS
+from PIL import Image
 from typing import List
 
 
@@ -107,6 +109,12 @@ class UnlabelledImageFolderDataset(Dataset):
                 will always occur after. Defaults to None.
         recursive (bool, optional): Whether to search folders recursively for images.
             Defaults to False.
+        output_format (str, optional): Data format to output data in, if None the default
+            format used by Pillow will be used (CWH). Defaults to DataFormat.CHW.
+        channels (int, optional): Number of output channels (1 or 3). If the loaded
+            image is 1 channel and 3 channels are required the single channel
+            will be copied across each channel. If 3 channels are loaded and 1 channel
+            is required a weighted RGB to L conversion occurs.
     """
 
     def __init__(
@@ -115,13 +123,17 @@ class UnlabelledImageFolderDataset(Dataset):
         extensions: List = IMG_EXTENSIONS,
         transform: Transform = None,
         recursive: bool = False,
+        output_format: str = DataFormat.CHW,
+        channels: int = 3
     ):
         super(UnlabelledImageFolderDataset, self).__init__()
         self.dir_path = dir_path
         self.files = sorted(find_files(dir_path, extensions, recursive))
         self.loader = default_loader
         self.transform = transform
-
+        self.output_format = output_format
+        assert(channels in [1, 3])
+        self.channels = channels
         if len(self.files) == 0:
             raise (
                 RuntimeError(
@@ -133,13 +145,25 @@ class UnlabelledImageFolderDataset(Dataset):
     def __getitem__(self, index: int):
         path = self.files[index]
         img = self.loader(path)
+        img = self.set_color_channels(img)
         # Apply custom transform
         if self.transform:
             img = self.transform(img)
         # Convert to tensor if this hasn't be done during the transform
         if not isinstance(img, torch.Tensor):
             img = F.to_tensor(img)
+        if self.output_format is not None:
+            img = img.permute(permute_tuple(PIL_FORMAT, self.output_format))
         return img, index
+
+    def set_color_channels(self, img: Image) -> Image:
+        channels = len(img.getbands())
+        if channels != self.channels:
+            if self.channels == 1:
+                return img.convert('L')
+            if self.channels == 3:
+                return img.convert('RGB')
+        return img
 
     def __len__(self):
         return len(self.files)
