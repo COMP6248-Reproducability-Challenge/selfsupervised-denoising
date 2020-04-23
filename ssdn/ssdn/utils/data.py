@@ -4,7 +4,12 @@ import torch
 from torch import Tensor
 
 from PIL import Image
-from ssdn.utils.data_format import DataFormat, DataDim, DATA_FORMAT_DIM_INDEX, permute_tuple
+from ssdn.utils.data_format import (
+    DataFormat,
+    DataDim,
+    DATA_FORMAT_DIM_INDEX,
+    permute_tuple,
+)
 
 
 def clip_img(img: Tensor, inplace: bool = False) -> Tensor:
@@ -49,19 +54,22 @@ def rotate(
     if angle == 0:
         return x
     elif angle == 90:
-        return x.transpose(h_dim, w_dim).flip(w_dim)
+        return x.transpose(h_dim, w_dim)
     elif angle == 180:
         return x.flip(h_dim)
     elif angle == 270:
-        return x.transpose(h_dim, w_dim)
+        return x.transpose(h_dim, w_dim).flip(w_dim)
     else:
         raise NotImplementedError("Must be rotation divisible by 90 degrees")
 
 
-def show_image(img: Tensor, data_format: str = DataFormat.CHW):
+def tensor2image(img: Tensor, data_format: str = DataFormat.CHW) -> Image:
     np_img = img.detach().numpy()
     np_img = np.clip(np_img, 0, 1)
     np_img = np_img.transpose(*permute_tuple(data_format, DataFormat.WHC))
-    print(np_img.shape)
-    pil_img = Image.fromarray(np.uint8(np_img * 255))
+    return Image.fromarray(np.uint8(np_img * 255))
+
+
+def show_tensor_image(img: Tensor, data_format: str = DataFormat.CHW):
+    pil_img = tensor2image(img, data_format=data_format)
     pil_img.show()

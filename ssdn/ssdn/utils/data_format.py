@@ -4,6 +4,7 @@ from enum import Enum, auto
 from collections import OrderedDict
 from typing import Dict, Tuple
 
+
 class DataFormat:
     BHWC = "BHWC"
     BWHC = "BWHC"
@@ -79,7 +80,7 @@ for data_format in utils.list_constants(DataFormat):
 
 
 def permute_tuple(cur: str, target: str) -> Tuple[int]:
-    assert(sorted(cur) == sorted(target))
+    assert sorted(cur) == sorted(target)
 
     # Ensure reference dictionaries exist
     if cur not in DATA_FORMAT_INDEX_DIM:
