@@ -6,26 +6,10 @@ __authors__ = "David Jones <dsj1n15@ecs.soton.ac.uk>"
 import numpy as np
 import torch
 import torch.functional as F
+import re
 
-from nptyping import Array
-from numbers import Number
+from typing import Any, List
 from torch import Tensor
-
-from ssdn.utils.data_format import DataFormat, DataDim, DATA_FORMAT_DIMS
-
-
-def set_color_channels(x: Array[Number], num_channels: int):
-    # ## FROM NVIDIA SOURCE ## #
-    assert x.shape[0] in [1, 3, 4]
-    x = x[: min(x.shape[0], 3)]  # drop possible alpha channel
-    if x.shape[0] == num_channels:
-        return x
-    elif x.shape[0] == 1:
-        return np.tile(x, [3, 1, 1])
-    y = np.mean(x, axis=0, keepdims=True)
-    if np.issubdtype(x.dtype, np.integer):
-        y = np.round(y).astype(x.dtype)
-    return y
 
 
 def compute_ramped_lrate(
@@ -50,56 +34,6 @@ def compute_ramped_lrate(
     return learning_rate
 
 
-def clip_img(img: Tensor, inplace: bool = False) -> Tensor:
-    """Clip tensor data so that it is within a valid image range. That is
-    between 0-1 for float images and 0-255 for int images. Values are clamped
-    meaning any values outside this range are set to the limits, other values
-    are not touched.
-
-    Args:
-        img (Tensor): Image or batch of images to clip.
-        inplace (bool, optional): Whether to do the operation in place.
-            Defaults to False; this will first clone the data.
-
-    Returns:
-        Tensor: Reference to input image or new image.
-    """
-    if not inplace:
-        img = img.clone()
-    if img.is_floating_point():
-        c_min, c_max = (0, 1)
-    else:
-        c_min, c_max = (0, 255)
-    return torch.clamp_(img, c_min, c_max)
-
-
-def rotate(
-    x: torch.Tensor, angle: int, data_format: str = DataFormat.BCHW
-) -> torch.Tensor:
-    """Rotate images by 90 degrees clockwise. Can handle any 2D data format.
-    Args:
-        x (Tensor): Image or batch of images.
-        angle (int): Clockwise rotation angle in multiples of 90.
-        data_format (str, optional): Format of input image data, e.g. BCHW,
-            HWC. Defaults to BCHW.
-    Returns:
-        Tensor: Copy of tensor with rotation applied.
-    """
-    dims = DATA_FORMAT_DIMS[data_format]
-    h_dim = dims[DataDim.HEIGHT]
-    w_dim = dims[DataDim.WIDTH]
-
-    if angle == 0:
-        return x
-    elif angle == 90:
-        return x.transpose(h_dim, w_dim).flip(w_dim)
-    elif angle == 180:
-        return x.flip(h_dim)
-    elif angle == 270:
-        return x.transpose(h_dim, w_dim)
-    else:
-        raise NotImplementedError("Must be rotation divisible by 90 degrees")
-
 def mse2psnr(mse: Tensor, float_imgs: bool = True):
     high_val = torch.tensor(1.0) if float_imgs else torch.tensor(255)
     return 20 * torch.log10(high_val) - 10 * torch.log10(mse)
@@ -108,3 +42,19 @@ def mse2psnr(mse: Tensor, float_imgs: bool = True):
 def calculate_psnr(img: Tensor, ref: Tensor, axis: int = None):
     mse = F.reduce_mean((img - ref) ** 2, axis=axis)
     return mse2psnr(mse, img.is_floating_point())
+
+
+def list_constants(clazz: Any, private: bool = False) -> List[Any]:
+    """Fetch all values from variables formatted as constants in a class.
+
+    Args:
+        clazz (Any): Class to fetch constants from.
+
+    Returns:
+        List[Any]: List of values.
+    """
+    variables = [i for i in dir(clazz) if not callable(i)]
+    regex = re.compile(r"^{}[A-Z0-9_]*$".format("" if private else "[A-Z]"))
+    names = list(filter(regex.match, variables))
+    values = [clazz.__dict__[name] for name in names]
+    return values
