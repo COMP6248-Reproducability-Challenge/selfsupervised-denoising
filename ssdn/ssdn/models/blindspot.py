@@ -3,6 +3,12 @@ import ssdn
 import torch.nn as nn
 
 
+# TODO: Should we actually be reusing weights for block2, this is not done on
+# other implementations of UNET
+# TODO: Should we be adding Dropout, this is used on some unet implementations.
+# TODO: What should the linear output function be?
+# TODO: Add shift to downsample for blindspot (max pool)
+
 class ShiftConv2d(nn.Conv2d):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -113,7 +119,6 @@ class NoiseNetwork(nn.Module):
             self.Conv2d(nin_a_io, 96, 1),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
             self.Conv2d(96, out_channels, 1),
-            # TODO: What should the linear output function be?
         )
 
         # Initialize weights
@@ -166,3 +171,14 @@ class NoiseNetwork(nn.Module):
         x = self._block7(x)
 
         return x
+
+    def input_wh_mul(self) -> int:
+        """Multiple that both the width and height dimensions of an input must be to be
+        processed by the network. This is devised from the number of pooling layers that
+        reduce the input size.
+
+        Returns:
+            int: Dimension multiplier
+        """
+        max_pool_layers = 5
+        return 2 ** max_pool_layers
