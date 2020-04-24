@@ -8,8 +8,10 @@ import torch
 import ssdn.utils
 import torchvision.transforms.functional as F
 
+from torch import Tensor
 from torch.utils.data import Dataset
 from ssdn.utils.transforms import Transform
+from typing import Tuple
 
 
 class HDF5Dataset(Dataset):
@@ -32,7 +34,7 @@ class HDF5Dataset(Dataset):
             self.img_count = h5file["images"].shape[0]
         self.transform = transform
 
-    def __getitem__(self, index: int):
+    def __getitem__(self, index: int) -> Tuple[Tensor, int]:
         with h5py.File(self.file_path, "r") as h5file:
             img = h5file["images"][index]
             shp = h5file["shapes"][index]
@@ -44,7 +46,14 @@ class HDF5Dataset(Dataset):
         # Convert to tensor if this hasn't be done during the transform
         if not isinstance(img, torch.Tensor):
             img = F.to_tensor(img)
-        return img
+        return img, index
+
+    def image_size(self, index: int) -> Tensor:
+        """ Quick method to check image size by accessing only shape field.
+        """
+        with h5py.File(self.file_path, "r") as h5file:
+            shp = h5file["shapes"][index]
+        return torch.tensor(shp)
 
     def __len__(self):
         return self.img_count

@@ -8,22 +8,43 @@ from torch.utils.data import Dataset
 from ssdn.params import NoiseAlgorithm
 
 from enum import Enum, auto
-from typing import Union, Dict, Tuple
+from typing import Union, Dict, Tuple, List, Optional
 from numbers import Number
 from ssdn.utils.data_format import DataFormat, DATA_FORMAT_DIM_INDEX, DataDim
 
 
 class NoisyDataset(Dataset):
+    """Wrapper for a child dataset for creating inputs for training denoising
+    algorithms. This involves adding noise to data and creating appropriate
+    references for the algorithm being trained. Data can be padded to match
+    requirements of input network; this can be unpadded again using information
+    provided in the metadata dictionary. Metadata includes shapes of the inputs
+    before padding, the index of the data returned, and noise coefficients used.
+
+    Args:
+        child (Dataset): Child dataset to load data from. It is expected that an
+            unlabelled image is the first element of any returned data.
+        noise_style (str): The noise style to use in string representation.
+        algorithm (NoiseAlgorithm): The algorithm the loader should prepare data for.
+            This will dictate the appropriate reference images created.
+        enable_metadata (bool, optional): Whether to return a dictionary containing
+            information about data creation. When False only two values are returned.
+            Defaults to True.
+        pad_uniform (bool, optional): Whether to pad returned images to the same size
+            as the largest image. This may cause very slow initialisation for large
+            datasets. Defaults to False.
+        pad_multiple (int, optional): Whether to pad the width and height of returned
+                images to a divisor. Ignored if None. Defaults to None.
+        square (bool, optional): Whether to pad such that width and height are equal.
+            Defaults to False.
+        data_format (str, optional): Format of data from underlying dataset.
+            Defaults to DataFormat.CHW.
+    """
+
     INPUT = 0
     REFERENCE = 1
     METADATA = 2
-
-    class Metadata(Enum):
-        INDEXES = auto()
-        INPUT_NOISE_VALUES = auto()
-        REFERENCE_NOISE_VALUES = auto()
-        INPUT_SHAPE = auto()
-        REFERENCE_SHAPE = auto()
+    """ Indexes for returned data."""
 
     def __init__(
         self,
@@ -31,10 +52,10 @@ class NoisyDataset(Dataset):
         noise_style: str,
         algorithm: NoiseAlgorithm,
         enable_metadata: bool = True,
-        pad_uniform: bool = True,
-        pad_multiple: int = 32,
+        pad_uniform: bool = False,
+        pad_multiple: int = None,
         square: bool = False,
-        data_format: str = DataFormat.CHW
+        data_format: str = DataFormat.CHW,
     ):
         self.child = child
         self.enable_metadata = enable_metadata
@@ -43,14 +64,18 @@ class NoisyDataset(Dataset):
         self.pad_uniform = pad_uniform
         self.pad_multiple = pad_multiple
         self.square = square
-        self._max_image_size = None
         self.data_format = data_format
 
-    def __getitem__(self, index: int):
+        # Initialise max image size property, this will load all data
+        self._max_image_size = None
+        if self.pad_uniform:
+            _ = self.max_image_size
+
+    def __getitem__(self, index: int) -> Tuple[Tensor, Tensor, Optional[Dict]]:
         data = self.child.__getitem__(index)
         img = data[0]
+
         if self.enable_metadata:
-            # Create metadata object
             metadata = {}
             metadata[NoisyDataset.Metadata.INDEXES] = index
         else:
@@ -69,9 +94,22 @@ class NoisyDataset(Dataset):
     def prepare_input(
         self, clean: Tensor, metadata: Dict = {}
     ) -> Tuple[Tensor, Tensor, Dict]:
-        # Helper function to fix coefficient shape to [n, 1, 1, 1] shape
+        """Translate clean reference into training input and reference. The algorithm
+        being trained dictates the reference used, e.g. Noise2Noise will create a
+        noisy input and noisy reference.
+
+        Args:
+            clean (Tensor): Clean input image to create noisy input and reference from.
+            metadata (Dict, optional): Dictionary to fill with metadata. Defaults to
+                creating a new dictionary.
+
+        Returns:
+            Tuple[Tensor, Tensor, Dict]: Input, Reference, Metadata Dictionary
+        """
+        # Helper function to fix coefficient shape to [1, 1, 1] shape, batcher will
+        # automatically elevate to [n, 1, 1, 1] shape if required
         def broadcast_coeffs(imgs: Tensor, coeffs: Union[Tensor, Number]):
-            return torch.zeros((imgs.shape[0], 1, 1, 1)) + coeffs
+            return torch.zeros((1, 1, 1)) + coeffs
 
         # Create the noisy input images
         noisy_in, noisy_in_coeff = ssdn.utils.noise.add_style(clean, self.noise_style)
@@ -100,8 +138,8 @@ class NoisyDataset(Dataset):
             metadata[NoisyDataset.Metadata.REFERENCE_NOISE_VALUES] = broadcast_coeffs(
                 ref, ref_coeff
             )
-            metadata[NoisyDataset.Metadata.INPUT_SHAPE] = inp.shape
-            metadata[NoisyDataset.Metadata.REFERENCE_SHAPE] = ref.shape
+            metadata[NoisyDataset.Metadata.INPUT_SHAPE] = torch.tensor(inp.shape)
+            metadata[NoisyDataset.Metadata.REFERENCE_SHAPE] = torch.tensor(ref.shape)
 
         # Original implementation pads before adding noise, here it is done after as it
         # reduces the false scenario of adding structured noise across the full image
@@ -109,22 +147,27 @@ class NoisyDataset(Dataset):
 
         return (inp, ref, metadata)
 
-
     @property
-    def max_image_size(self):
+    def max_image_size(self) -> List[int]:
+        """ Find the maximum image size in the dataset. Will try calling `image_size` method
+        first in case a fast method for checking size has been implemented. Will fall back
+        to loading images from the dataset as normal and checking their shape. Once this
+        method has been called once the maximum size will be cached for subsequent calls.
+        """
         if self._max_image_size is None:
-            # Get maximum image size in order CHW
-            df = DATA_FORMAT_DIM_INDEX[self.data_format]
-            dims = (df[DataDim.CHANNEL], df[DataDim.HEIGHT], df[DataDim.WIDTH])
-            max_image_size = [max([data[0].shape[axis] for data in self.child]) for axis in dims]
-            # Convert back into data format used by dataset
-            labelled = zip(max_image_size, dims)
-            ordered = [size for size, _ in sorted(labelled, key=lambda x: x[1])]
-            self._max_image_size = ordered
+            try:
+                image_sizes = [self.child.image_size(i) for i in range(len(self.child))]
+            except AttributeError:
+                image_sizes = [torch.tensor(data[0].shape) for data in self.child]
+
+            image_sizes = torch.stack(image_sizes)
+            max_image_size = torch.max(image_sizes, dim=0).values
+            self._max_image_size = max_image_size
         return self._max_image_size
 
-
     def get_output_size(self, image: Tensor) -> Tensor:
+        """Calculate output size of an image using the current padding configuration.
+        """
         df = DATA_FORMAT_DIM_INDEX[self.data_format]
         # Use largest image size in dataset if returning uniform sized tensors
         if self.pad_uniform:
@@ -145,9 +188,13 @@ class NoisyDataset(Dataset):
             image_size[df[DataDim.HEIGHT]] = size
             image_size[df[DataDim.WIDTH]] = size
 
-        return torch.Size(image_size)
+        return torch.tensor(image_size)
 
     def pad_to_output_size(self, image: Tensor) -> Tensor:
+        """ Apply reflection padding to the image to meet the current padding
+        configuration. Note that padding is handled by Numpy.
+        """
+
         supported = [DataFormat.CHW, DataFormat.CWH, DataFormat.BCHW, DataFormat.BCWH]
         if self.data_format not in supported:
             raise NotImplementedError("Padding not supported by data format")
@@ -165,6 +212,56 @@ class NoisyDataset(Dataset):
         pad_matrix[df[DataDim.WIDTH]] = [left, right]
         pad_matrix[df[DataDim.HEIGHT]] = [top, bottom]
         # PyTorch methods expect PIL images so fallback to Numpy for padding
-        np_padded = np.pad(image, pad_matrix, mode='reflect')
+        np_padded = np.pad(image, pad_matrix, mode="reflect")
         # Convert back to Tensor
-        return torch.tensor(np_padded, device=image.device, requires_grad=image.requires_grad)
+        return torch.tensor(
+            np_padded, device=image.device, requires_grad=image.requires_grad
+        )
+
+    @staticmethod
+    def _unpad_single(image: Tensor, shape: Tensor) -> Tensor:
+        # Create slice list extracting from 0:n for each shape axis
+        slices = list(map(lambda x: slice(*x), (zip([0] * len(shape), shape))))
+        return image[slices]
+
+    @staticmethod
+    def unpad(image: Tensor, shape: Tensor) -> Union[Tensor, List[Tensor]]:
+        """For a padded input image or set of padded images undo padding.
+        It is assumed that the original image is positioned in the top left
+        and that the channel count has not changed.
+
+        Args:
+            image (Tensor): Single image or batch of images.
+            shape (Tensor): Shape of output image same format as input image.
+
+        Returns:
+            Union[Tensor, List[Tensor]]: Unpadded image tensor if not batched.
+                List of unpadded images if batched.
+        """
+        if len(shape.shape) == 1:
+            return NoisyDataset._unpad_single(image, shape)
+        return [NoisyDataset._unpad_single(i, s) for i, s in zip(image, shape)]
+
+    @staticmethod
+    def unpad_input(image: Tensor, metadata: Dict) -> Union[Tensor, List[Tensor]]:
+        """ See `unpad()`. Uses input shape from metadata.
+        """
+        inp_shape = metadata[NoisyDataset.Metadata.INPUT_SHAPE]
+        return NoisyDataset.unpad(image, inp_shape)
+
+    @staticmethod
+    def unpad_reference(image: Tensor, metadata: Dict) -> Union[Tensor, List[Tensor]]:
+        """ See `unpad()`. Uses reference shape from metadata.
+        """
+        ref_shape = metadata[NoisyDataset.Metadata.REFERENCE_SHAPE]
+        return NoisyDataset.unpad(image, ref_shape)
+
+    class Metadata(Enum):
+        """ Enumeration of fields that can be contained in the metadata dictionary.
+        """
+        CHILD_DATA = auto()
+        INDEXES = auto()
+        INPUT_NOISE_VALUES = auto()
+        REFERENCE_NOISE_VALUES = auto()
+        INPUT_SHAPE = auto()
+        REFERENCE_SHAPE = auto()
