@@ -170,6 +170,11 @@ class Denoiser:
             param_group["lr"] = learning_rate
         return self._optimizer
 
+    def __call__(self, data: Tensor) -> Tensor:
+        model = self.models[Denoiser.MODEL]
+        data = data.to(self.device)
+        return model(data)
+
     def save(self):
         raise NotImplementedError()
 
