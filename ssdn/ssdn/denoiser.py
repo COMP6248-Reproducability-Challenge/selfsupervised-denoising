@@ -15,7 +15,7 @@ from ssdn.params import (
     PipelineOutput,
     Pipeline,
 )
-from ssdn.models.blindspot import NoiseNetwork
+from ssdn.models import NoiseNetwork
 from ssdn.datasets import NoisyDataset
 
 from typing import Dict
