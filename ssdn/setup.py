@@ -6,5 +6,5 @@ setup(
     name="ssdn",
     version=__version__,  # noqa
     packages=find_packages(),
-    install_requires=["nptyping", "h5py"],
+    install_requires=["nptyping", "h5py", "imagesize"],
 )
