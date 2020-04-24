@@ -73,3 +73,8 @@ def tensor2image(img: Tensor, data_format: str = DataFormat.CHW) -> Image:
 def show_tensor_image(img: Tensor, data_format: str = DataFormat.CHW):
     pil_img = tensor2image(img, data_format=data_format)
     pil_img.show()
+
+
+def save_tensor_image(img: Tensor, path: str, data_format: str = DataFormat.CHW):
+    pil_img = tensor2image(img, data_format=data_format)
+    pil_img.save(path)
