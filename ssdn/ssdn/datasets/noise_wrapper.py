@@ -202,7 +202,7 @@ class NoisyDataset(Dataset):
         df = DATA_FORMAT_DIM_INDEX[self.data_format]
         output_size = self.get_output_size(image)
         # Already correct, do not pad
-        if output_size == image.shape:
+        if all(output_size == torch.tensor(image.shape)):
             return image
         left, top = 0, 0
         right = output_size[df[DataDim.WIDTH]] - image.shape[df[DataDim.WIDTH]]
@@ -259,6 +259,7 @@ class NoisyDataset(Dataset):
     class Metadata(Enum):
         """ Enumeration of fields that can be contained in the metadata dictionary.
         """
+
         CHILD_DATA = auto()
         INDEXES = auto()
         INPUT_NOISE_VALUES = auto()
