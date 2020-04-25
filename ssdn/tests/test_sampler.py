@@ -1,8 +1,8 @@
 from torch.utils.data import DataLoader, Dataset
-from ssdn.datasets import FixedLengthSampler
+from ssdn.datasets import FixedLengthSampler, SamplingOrder
 from typing import List, Any
 
-num_workers = 1
+num_workers = 4
 
 
 class MockIndexDataset(Dataset):
@@ -29,7 +29,8 @@ def read_dataloader(dataloader: DataLoader) -> List[int]:
 
 def collapse_index_batches(index_batches: List[List[Any]]) -> List[Any]:
     indexes = []
-    map(indexes.extend, index_batches)
+    for batch in index_batches:
+        indexes.extend(batch)
     return indexes
 
 
@@ -148,3 +149,58 @@ def test_shuffled_batched():
     check_full_batches(index_batches, batch_size)
     indexes = collapse_index_batches(index_batches)
     check_index_repetition(indexes, dataset_length)
+
+
+def _test_state_saving():
+    dataset_length = 5
+    batch_size = 2
+    pause_batch = 2
+    dataset = MockIndexDataset(dataset_length)
+    sampler = FixedLengthSampler(dataset, num_samples=9, shuffled=False)
+    loader_params = {
+        "batch_size": batch_size,
+        "num_workers": num_workers,
+        "drop_last": False,
+        "sampler": sampler,
+    }
+    dataloader = DataLoader(dataset, **loader_params)
+    index_batches_ref = read_dataloader(dataloader)
+    indexes_ref = collapse_index_batches(index_batches_ref)
+
+    index_batches = []
+    for i, data in enumerate(dataloader):
+        index_batches += [data]
+        if i == pause_batch:
+            break
+
+    # State save, must update actual read count in case data has been loaded
+    # that has not yet been used
+    saved_iterator = sampler.last_iter()
+    read_count = len(collapse_index_batches(index_batches))
+    sampler_state_dict = saved_iterator.state_dict()
+    sampler_state_dict["index"] = read_count
+
+    # Attempt to resume
+    dataset = MockIndexDataset(dataset_length)
+    dataloader = DataLoader(dataset, **loader_params)
+    loaded_iterator = SamplingOrder.from_state_dict(sampler_state_dict)
+    sampler.for_next_iter(loaded_iterator)
+    for data in dataloader:
+        index_batches += [data]
+
+    # Resumed should match reference read in one iteration
+    indexes_ref = collapse_index_batches(index_batches_ref)
+    indexes = collapse_index_batches(index_batches)
+    zipped = zip(index_batches_ref, index_batches)
+    if not indexes_ref == indexes:
+        raise AssertionError("Got: {}, Expected: {}".format(indexes, indexes_ref))
+
+    zipped = zip(index_batches_ref, index_batches)
+    if not all(map(lambda x: all(x[0] == x[1]), zipped)):
+        raise AssertionError("Got: {}, Expected: {}".format(index_batches, index_batches_ref))
+
+
+def test_state_saving():
+    # Run test multiple times to account for multiple workers
+    for i in range(5):
+        _test_state_saving()

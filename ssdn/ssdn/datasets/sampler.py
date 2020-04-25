@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Contains custom sampler to allow repeated use of the same data with fair extraction.
 """
 __authors__ = "David Jones <dsj1n15@ecs.soton.ac.uk>"
@@ -5,7 +7,7 @@ __authors__ = "David Jones <dsj1n15@ecs.soton.ac.uk>"
 import torch
 
 from torch.utils.data import Sampler, Dataset
-from typing import Generator
+from typing import Generator, List, Dict
 
 
 class FixedLengthSampler(Sampler):
@@ -30,6 +32,8 @@ class FixedLengthSampler(Sampler):
         self.data_source = data_source
         self._num_samples = num_samples
         self.shuffled = shuffled
+        self._next_iter = None
+        self._last_iter = None
 
     @property
     def num_samples(self) -> int:
@@ -60,8 +64,46 @@ class FixedLengthSampler(Sampler):
                 current_idx += 1
                 remaining -= 1
 
-    def __iter__(self):
-        return self.sampler()
+    def __iter__(self) -> Generator[int, None, None]:
+        if self._next_iter is None:
+            sample_order = list(self.sampler())
+            self._last_iter = SamplingOrder(sample_order)
+            return self._last_iter
+        else:
+            return self._next_iter
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.num_samples
+
+    def for_next_iter(self, iter_order: SamplingOrder):
+        self._next_iter = iter_order
+
+    def last_iter(self) -> Generator[int, None, None]:
+        return self._last_iter
+
+class SamplingOrder:
+    def __init__(self, order: List[int], index: int = 0):
+        self.order = order
+        self.index = index
+
+    def __iter__(self) -> Generator[int, None, None]:
+        return self
+
+    def __next__(self) -> int:
+        if self.index < len(self.order):
+            value = self.order[self.index]
+            self.index += 1
+            return value
+        else:
+            raise StopIteration()
+
+    def set_read_count(self, read_count: int):
+        self.index = read_count
+
+    def state_dict(self) -> Dict:
+        state_dict = {"order": self.order, "index": self.index}
+        return state_dict
+
+    @staticmethod
+    def from_state_dict(state_dict: Dict) -> SamplingOrder:
+        return SamplingOrder(state_dict["order"], state_dict["index"])
