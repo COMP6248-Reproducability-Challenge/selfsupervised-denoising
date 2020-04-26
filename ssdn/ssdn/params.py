@@ -10,40 +10,71 @@ class NoiseAlgorithm(Enum):
 
 
 class NoiseValue(Enum):
-    UNKNOWN = "unknown"
-    KNOWN_GLOBAL = "known_global"
-    KNOWN_PER_IMAGE = "known_per_image"
+    CONSTANT_UNKNOWN = "constant_unknown"
+    VARIABLE_UNKNOWN = "variable_unknown"
+    KNOWN = "known"
 
 
 class Pipeline(Enum):
     MSE = auto()
     SSDN = auto()
 
+
 class ConfigValue(Enum):
+    # Denoiser Modes
     ALGORITHM = auto()
     BLINDSPOT = auto()
-    NOISE_STYLE = auto()
-    DIAGONAL_COVARIANCE = auto()
-    TRAINING_PATCH_SIZE = auto()
+    PIPELINE = auto()
+    IMAGE_CHANNELS = auto()
 
-    MINIBATCH_SIZE = auto()
+    NOISE_STYLE = auto()
+
     LEARNING_RATE = auto()
     LR_RAMPUP_FRACTION = auto()
     LR_RAMPDOWN_FRACTION = auto()
-    PIPELINE = auto()
+    # SSDN Pipeline Configuration
     NOISE_VALUE_STATE = auto()
-
+    DIAGONAL_COVARIANCE = auto()
+    # Training Loop Configuration
     EVAL_INTERVAL = auto()
     PRINT_INTERVAL = auto()
-    TRAINING_ITERATIONS = auto()
+    TRAIN_ITERATIONS = auto()
+
+    DATALOADER_WORKERS = auto()
+    TRAIN_DATASET_TYPE = auto()
+    TRAIN_DATA_PATH = auto()
+    TRAIN_PATCH_SIZE = auto()
+    TRAIN_MINIBATCH_SIZE = auto()
+
+    TEST_DATASET_TYPE = auto()
+    TEST_DATA_PATH = auto()
+    TEST_MINIBATCH_SIZE = auto()
+    PIN_DATA_MEMORY = auto()
+
+
+class DatasetType(Enum):
+    HDF5 = auto()
+    FOLDER = auto()
 
 
 class StateValue(Enum):
+    INITIALISED = auto()
+    EVAL_MODE = auto()
+
     INPUT = auto()
     ITERATION = auto()
     REFERENCE = auto()
-    LOSS_HISTORY = auto()
-    TEST_HISTORY = auto()
+    HISTORY = auto()
+
+
+class HistoryValue(Enum):
+    PSNR = auto()
+    LOSS = auto()
+
+
+class DenoiserMode(Enum):
+    TRAIN = auto()
+    EVAL = auto()
 
 
 class PipelineOutput(Enum):
