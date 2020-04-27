@@ -9,6 +9,7 @@ import glob
 import tempfile
 import string
 import imagesize
+import ssdn
 
 from torch import Tensor
 from ssdn.utils.transforms import Transform
@@ -36,7 +37,7 @@ class UnlabelledImageFolderDataset(Dataset):
         recursive (bool, optional): Whether to search folders recursively for images.
             Defaults to False.
         output_format (str, optional): Data format to output data in, if None the default
-            format used by Pillow will be used (CWH). Defaults to DataFormat.CHW.
+            format used by PyTorch will be used. Defaults to DataFormat.CHW.
         channels (int, optional): Number of output channels (1 or 3). If the loaded
             image is 1 channel and 3 channels are required the single channel
             will be copied across each channel. If 3 channels are loaded and 1 channel
@@ -55,6 +56,7 @@ class UnlabelledImageFolderDataset(Dataset):
         super(UnlabelledImageFolderDataset, self).__init__()
         self.dir_path = dir_path
         self.files = sorted(find_files(dir_path, extensions, recursive))
+        self.cache = {}
         self.loader = default_loader
         self.transform = transform
         self.output_format = output_format
@@ -71,7 +73,7 @@ class UnlabelledImageFolderDataset(Dataset):
     def __getitem__(self, index: int) -> Tuple[Tensor, int]:
         path = self.files[index]
         img = self.loader(path)
-        img = self.set_color_channels(img)
+        img = ssdn.utils.set_color_channels(img, self.channels)
         # Apply custom transform
         if self.transform:
             img = self.transform(img)
@@ -82,22 +84,28 @@ class UnlabelledImageFolderDataset(Dataset):
             img = img.permute(permute_tuple(PIL_FORMAT, self.output_format))
         return img, index
 
-    def image_size(self, index: int) -> Tensor:
-        """ Quick method to check image size using header information.
+    def image_size(self, index: int, ignore_transform: bool = False) -> Tensor:
+        """Quick method to check image size using header information. Note that if a
+        transform is in place then the data must be loaded directly from the dataset
+        to ensure the transform has not changed the shape.
+
+        Args:
+            index (int): Index of image in dataset.
+            ignore_transform (bool, optional): Whether the transform is known not to
+                affect the output size. This will cause the true image size to always
+                be returned. Defaults to False.
+
+        Returns:
+            Tensor: Shape tensor in output data format
         """
+        # Check if quick method viable
+        if self.transform is not None and not ignore_transform:
+            return torch.tensor(self.__getitem__(index)[0].shape)
+        # Can use quick method
         path = self.files[index]
         size = imagesize.get(path)
         cwh = torch.tensor(tuple((self.channels, *size)))
-        return cwh[list(permute_tuple(DataFormat.CWH, DataFormat.CHW))]
-
-    def set_color_channels(self, img: Image) -> Image:
-        channels = len(img.getbands())
-        if channels != self.channels:
-            if self.channels == 1:
-                return img.convert("L")
-            if self.channels == 3:
-                return img.convert("RGB")
-        return img
+        return cwh[list(permute_tuple(DataFormat.CWH, self.output_format))]
 
     def __len__(self):
         return len(self.files)

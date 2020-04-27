@@ -81,6 +81,7 @@ class FixedLengthSampler(Sampler):
     def last_iter(self) -> Generator[int, None, None]:
         return self._last_iter
 
+
 class SamplingOrder:
     def __init__(self, order: List[int], index: int = 0):
         self.order = order
@@ -89,6 +90,9 @@ class SamplingOrder:
     def __iter__(self) -> Generator[int, None, None]:
         return self
 
+    def __len__(self) -> int:
+        return len(self.order)
+
     def __next__(self) -> int:
         if self.index < len(self.order):
             value = self.order[self.index]
@@ -96,9 +100,6 @@ class SamplingOrder:
             return value
         else:
             raise StopIteration()
-
-    def set_read_count(self, read_count: int):
-        self.index = read_count
 
     def state_dict(self) -> Dict:
         state_dict = {"order": self.order, "index": self.index}
