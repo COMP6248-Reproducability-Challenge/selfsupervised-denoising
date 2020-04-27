@@ -67,7 +67,17 @@ def tensor2image(img: Tensor, data_format: str = DataFormat.CHW) -> Image:
     np_img = img.detach().numpy()
     np_img = np.clip(np_img, 0, 1)
     np_img = np_img.transpose(*permute_tuple(data_format, DataFormat.WHC))
-    return Image.fromarray(np.uint8(np_img * 255))
+    channels = np_img.shape[-1]
+    if channels == 3:
+        mode = "RGB"
+    elif channels == 1:
+        mode = "L"
+        np_img = np.squeeze(np_img)
+    else:
+        raise NotImplementedError(
+            "Cannot convert image with {} channels to PIL image.".format(channels)
+        )
+    return Image.fromarray(np.uint8(np_img * 255), mode=mode)
 
 
 def show_tensor_image(img: Tensor, data_format: str = DataFormat.CHW):
@@ -78,3 +88,13 @@ def show_tensor_image(img: Tensor, data_format: str = DataFormat.CHW):
 def save_tensor_image(img: Tensor, path: str, data_format: str = DataFormat.CHW):
     pil_img = tensor2image(img, data_format=data_format)
     pil_img.save(path)
+
+
+def set_color_channels(img: Image, channels: int) -> Image:
+    cur_channels = len(img.getbands())
+    if cur_channels != channels:
+        if channels == 1:
+            return img.convert("L")
+        if channels == 3:
+            return img.convert("RGB")
+    return img

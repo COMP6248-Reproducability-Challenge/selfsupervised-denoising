@@ -7,9 +7,11 @@ import numpy as np
 import torch
 import torch.functional as F
 import re
+import os
 
 from typing import Any, List
 from torch import Tensor
+from contextlib import contextmanager
 
 
 def compute_ramped_lrate(
@@ -58,3 +60,19 @@ def list_constants(clazz: Any, private: bool = False) -> List[Any]:
     names = list(filter(regex.match, variables))
     values = [clazz.__dict__[name] for name in names]
     return values
+
+
+@contextmanager
+def cd(newdir: str):
+    """Context manager for managing changes of directory where when the context is left
+    the original directory is restored.
+
+    Args:
+        newdir (str): New directory to enter
+    """
+    prevdir = os.getcwd()
+    os.chdir(os.path.expanduser(newdir))
+    try:
+        yield
+    finally:
+        os.chdir(prevdir)
