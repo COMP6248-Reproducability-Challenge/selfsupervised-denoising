@@ -12,6 +12,8 @@ from typing import Union, Dict, Tuple, List, Optional
 from numbers import Number
 from ssdn.utils.data_format import DataFormat, DATA_FORMAT_DIM_INDEX, DataDim
 
+NULL_IMAGE = torch.zeros(0)
+
 
 class NoisyDataset(Dataset):
     """Wrapper for a child dataset for creating inputs for training denoising
@@ -110,6 +112,8 @@ class NoisyDataset(Dataset):
         # automatically elevate to [n, 1, 1, 1] shape if required
         def broadcast_coeffs(imgs: Tensor, coeffs: Union[Tensor, Number]):
             return torch.zeros((1, 1, 1)) + coeffs
+        # Track the true shape as batching may lead to padding distorting this shape
+        image_shape = clean.shape
 
         # Create the noisy input images
         noisy_in, noisy_in_coeff = ssdn.utils.noise.add_style(clean, self.noise_style)
@@ -123,27 +127,29 @@ class NoisyDataset(Dataset):
             ref, ref_coeff = ssdn.utils.noise.add_style(clean, self.noise_style)
         # SSDN requires noisy input and no reference images
         elif self.algorithm == NoiseAlgorithm.SELFSUPERVISED_DENOISING:
-            ref, ref_coeff = torch.zeros(0), 0
+            ref, ref_coeff = NULL_IMAGE, 0
         # SSDN mean only requires noisy input and same image as noisy input reference
         elif self.algorithm == NoiseAlgorithm.SELFSUPERVISED_DENOISING_MEAN_ONLY:
             ref, ref_coeff = noisy_in, noisy_in_coeff
         else:
             raise NotImplementedError("Denoising algorithm not supported")
 
+        # Original implementation pads before adding noise, here it is done after as it
+        # reduces the false scenario of adding structured noise across the full image
+        inp = self.pad_to_output_size(inp)
+        if ref is not NULL_IMAGE:
+            ref = self.pad_to_output_size(ref)
+
         # Fill metdata dictionary
         if metadata is not None:
+            metadata[NoisyDataset.Metadata.CLEAN] = self.pad_to_output_size(clean)
+            metadata[NoisyDataset.Metadata.IMAGE_SHAPE] = torch.tensor(image_shape)
             metadata[NoisyDataset.Metadata.INPUT_NOISE_VALUES] = broadcast_coeffs(
                 inp, inp_coeff
             )
             metadata[NoisyDataset.Metadata.REFERENCE_NOISE_VALUES] = broadcast_coeffs(
                 ref, ref_coeff
             )
-            metadata[NoisyDataset.Metadata.INPUT_SHAPE] = torch.tensor(inp.shape)
-            metadata[NoisyDataset.Metadata.REFERENCE_SHAPE] = torch.tensor(ref.shape)
-
-        # Original implementation pads before adding noise, here it is done after as it
-        # reduces the false scenario of adding structured noise across the full image
-        inp, ref = self.pad_to_output_size(inp), self.pad_to_output_size(ref)
 
         return (inp, ref, metadata)
 
@@ -225,44 +231,35 @@ class NoisyDataset(Dataset):
         return image[slices]
 
     @staticmethod
-    def unpad(image: Tensor, shape: Tensor) -> Union[Tensor, List[Tensor]]:
-        """For a padded input image or set of padded images undo padding.
-        It is assumed that the original image is positioned in the top left
-        and that the channel count has not changed.
-
-        Args:
-            image (Tensor): Single image or batch of images.
-            shape (Tensor): Shape of output image same format as input image.
-
-        Returns:
-            Union[Tensor, List[Tensor]]: Unpadded image tensor if not batched.
-                List of unpadded images if batched.
-        """
+    def _unpad(image: Tensor, shape: Tensor) -> Union[Tensor, List[Tensor]]:
         if len(shape.shape) == 1:
             return NoisyDataset._unpad_single(image, shape)
         return [NoisyDataset._unpad_single(i, s) for i, s in zip(image, shape)]
 
     @staticmethod
-    def unpad_input(image: Tensor, metadata: Dict) -> Union[Tensor, List[Tensor]]:
-        """ See `unpad()`. Uses input shape from metadata.
-        """
-        inp_shape = metadata[NoisyDataset.Metadata.INPUT_SHAPE]
-        return NoisyDataset.unpad(image, inp_shape)
+    def unpad(image: Tensor, metadata: Dict) -> Union[Tensor, List[Tensor]]:
+        """For a padded image or batch of padded images, undo padding. It is
+        assumed that the original image is positioned in the top left and
+        that the channel count has not changed.
 
-    @staticmethod
-    def unpad_reference(image: Tensor, metadata: Dict) -> Union[Tensor, List[Tensor]]:
-        """ See `unpad()`. Uses reference shape from metadata.
+        Args:
+            image (Tensor): Single image or batch of images.
+            metadata (Tensor): Metadata dictionary associated with images to
+                unpad.
+
+        Returns:
+            Union[Tensor, List[Tensor]]: Unpadded image tensor if not batched.
+                List of unpadded images if batched.
         """
-        ref_shape = metadata[NoisyDataset.Metadata.REFERENCE_SHAPE]
-        return NoisyDataset.unpad(image, ref_shape)
+        inp_shape = metadata[NoisyDataset.Metadata.IMAGE_SHAPE]
+        return NoisyDataset.unpad(image, inp_shape)
 
     class Metadata(Enum):
         """ Enumeration of fields that can be contained in the metadata dictionary.
         """
 
-        CHILD_DATA = auto()
+        CLEAN = auto()
+        IMAGE_SHAPE = auto()
         INDEXES = auto()
         INPUT_NOISE_VALUES = auto()
         REFERENCE_NOISE_VALUES = auto()
-        INPUT_SHAPE = auto()
-        REFERENCE_SHAPE = auto()
