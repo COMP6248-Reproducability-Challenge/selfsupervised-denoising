@@ -54,11 +54,11 @@ def rotate(
     if angle == 0:
         return x
     elif angle == 90:
-        return x.transpose(h_dim, w_dim)
+        return x.flip(w_dim).transpose(h_dim, w_dim)
     elif angle == 180:
-        return x.flip(h_dim)
+        return x.flip(w_dim).flip(h_dim)
     elif angle == 270:
-        return x.transpose(h_dim, w_dim).flip(w_dim)
+        return x.flip(h_dim).transpose(h_dim, w_dim)
     else:
         raise NotImplementedError("Must be rotation divisible by 90 degrees")
 
