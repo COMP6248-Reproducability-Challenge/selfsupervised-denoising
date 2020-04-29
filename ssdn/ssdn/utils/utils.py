@@ -5,7 +5,7 @@ __authors__ = "David Jones <dsj1n15@ecs.soton.ac.uk>"
 
 import numpy as np
 import torch
-import torch.functional as F
+import torch.nn.functional as F
 import re
 import os
 
@@ -41,8 +41,12 @@ def mse2psnr(mse: Tensor, float_imgs: bool = True):
     return 20 * torch.log10(high_val) - 10 * torch.log10(mse)
 
 
-def calculate_psnr(img: Tensor, ref: Tensor, axis: int = None):
-    mse = F.reduce_mean((img - ref) ** 2, axis=axis)
+def calculate_psnr(img: Tensor, ref: Tensor, keep_batch: bool = True):
+    if keep_batch:
+        mse = F.mse_loss(img,  ref, reduction="none")
+        mse = mse.view(mse.shape[0], -1).mean(1, keepdim=True)
+    else:
+        mse = F.mse_loss(img,  ref, reduction="mean")
     return mse2psnr(mse, img.is_floating_point())
 
 

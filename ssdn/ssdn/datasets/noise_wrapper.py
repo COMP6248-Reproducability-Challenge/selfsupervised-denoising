@@ -112,6 +112,7 @@ class NoisyDataset(Dataset):
         # automatically elevate to [n, 1, 1, 1] shape if required
         def broadcast_coeffs(imgs: Tensor, coeffs: Union[Tensor, Number]):
             return torch.zeros((1, 1, 1)) + coeffs
+
         # Track the true shape as batching may lead to padding distorting this shape
         image_shape = clean.shape
 
@@ -252,7 +253,7 @@ class NoisyDataset(Dataset):
                 List of unpadded images if batched.
         """
         inp_shape = metadata[NoisyDataset.Metadata.IMAGE_SHAPE]
-        return NoisyDataset.unpad(image, inp_shape)
+        return NoisyDataset._unpad(image, inp_shape)
 
     class Metadata(Enum):
         """ Enumeration of fields that can be contained in the metadata dictionary.

@@ -5,23 +5,6 @@ from collections import OrderedDict
 from typing import Dict, Tuple
 
 
-class DataFormat:
-    BHWC = "BHWC"
-    BWHC = "BWHC"
-    BCHW = "BCHW"
-    BCWH = "BCWH"
-    CHW = "CHW"
-    CWH = "CWH"
-    HWC = "HWC"
-    WHC = "WHC"
-
-
-PIL_FORMAT = DataFormat.CWH
-PIL_BATCH_FORMAT = DataFormat.BCWH
-""" Formats used by Pillow/PIL.
-"""
-
-
 class DataDim(Enum):
     BATCH = auto()
     CHANNEL = auto()
@@ -41,6 +24,39 @@ DIM_CHAR_DICT = {
 CHAR_DIM_DICT = dict((v, k) for k, v in DIM_CHAR_DICT.items())
 """ Character association to enumeration representations.
 """
+
+
+def batch(data_format: str) -> str:
+    """ Append batching to a format if it is not already there. Assume LHS.
+    """
+    if DIM_CHAR_DICT[DataDim.BATCH] not in data_format:
+        return DIM_CHAR_DICT[DataDim.BATCH] + data_format
+    else:
+        return data_format
+
+
+def unbatch(data_format: str) -> str:
+    """ Append batching to a format if it is not already there. Assume LHS.
+    """
+    return data_format.replace(DIM_CHAR_DICT[DataDim.BATCH], "")
+
+
+class DataFormat:
+    BHWC = "BHWC"
+    BWHC = "BWHC"
+    BCHW = "BCHW"
+    BCWH = "BCWH"
+    HWC = "HWC"
+    WHC = "WHC"
+    CHW = "CHW"
+    CWH = "CWH"
+
+
+PIL_FORMAT = DataFormat.CWH
+PIL_BATCH_FORMAT = DataFormat.BCWH
+""" Formats used by Pillow/PIL.
+"""
+
 
 DATA_FORMAT_INDEX_DIM = {}
 """ Storage for pre-defined dimension format dictionaries that map

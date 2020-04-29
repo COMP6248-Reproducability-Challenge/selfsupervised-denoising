@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torchvision
 
 from torch import Tensor
 
@@ -9,6 +10,8 @@ from ssdn.utils.data_format import (
     DataDim,
     DATA_FORMAT_DIM_INDEX,
     permute_tuple,
+    batch,
+    unbatch,
 )
 
 
@@ -64,7 +67,14 @@ def rotate(
 
 
 def tensor2image(img: Tensor, data_format: str = DataFormat.CHW) -> Image:
-    np_img = img.detach().numpy()
+    img = img.detach()
+    # Create a grid of images if batched
+    if isinstance(img, list) or len(img.shape) == 4:
+        img = img.permute(permute_tuple(batch(data_format), DataFormat.BCHW))
+        img = torchvision.utils.make_grid(img)
+        img = img.permute(permute_tuple(DataFormat.CHW, unbatch(data_format)))
+
+    np_img = img.numpy()
     np_img = np.clip(np_img, 0, 1)
     np_img = np_img.transpose(*permute_tuple(data_format, DataFormat.WHC))
     channels = np_img.shape[-1]
