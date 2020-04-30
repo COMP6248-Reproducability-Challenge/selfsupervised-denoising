@@ -156,20 +156,23 @@ class NoiseNetwork(nn.Module):
         )
 
         # Initialize weights
-        self._init_weights()
+        self.init_weights()
 
     @property
     def blindspot(self) -> bool:
         return self._blindspot
 
-    def _init_weights(self):
+    def init_weights(self):
         """Initializes weights using Kaiming  He et al. (2015).
 
         Only convolution layers have learnable weights. All convolutions use a leaky
         relu activation function (negative_slope = 0.1) except the last which is just
         a linear output.
         """
+        with torch.no_grad():
+            self._init_weights()
 
+    def _init_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight.data, a=0.1)
