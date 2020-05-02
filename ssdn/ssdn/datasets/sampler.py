@@ -77,6 +77,7 @@ class FixedLengthSampler(Sampler):
 
     def for_next_iter(self, iter_order: SamplingOrder):
         self._next_iter = iter_order
+        self._last_iter = iter_order
 
     def last_iter(self) -> Generator[int, None, None]:
         return self._last_iter

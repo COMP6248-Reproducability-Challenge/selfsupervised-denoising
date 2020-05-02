@@ -233,12 +233,12 @@ class NoisyDataset(Dataset):
 
     @staticmethod
     def _unpad(image: Tensor, shape: Tensor) -> Union[Tensor, List[Tensor]]:
-        if len(shape.shape) == 1:
+        if len(image.shape) <= shape.shape[-1]:
             return NoisyDataset._unpad_single(image, shape)
         return [NoisyDataset._unpad_single(i, s) for i, s in zip(image, shape)]
 
     @staticmethod
-    def unpad(image: Tensor, metadata: Dict) -> Union[Tensor, List[Tensor]]:
+    def unpad(image: Tensor, metadata: Dict, batch_index: int = None) -> Union[Tensor, List[Tensor]]:
         """For a padded image or batch of padded images, undo padding. It is
         assumed that the original image is positioned in the top left and
         that the channel count has not changed.
@@ -253,6 +253,9 @@ class NoisyDataset(Dataset):
                 List of unpadded images if batched.
         """
         inp_shape = metadata[NoisyDataset.Metadata.IMAGE_SHAPE]
+        if batch_index is not None:
+            image = image[batch_index]
+            inp_shape = inp_shape[batch_index]
         return NoisyDataset._unpad(image, inp_shape)
 
     class Metadata(Enum):
