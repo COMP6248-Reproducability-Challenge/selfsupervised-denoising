@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from enum import Enum, auto
+from typing import List
 
 
 class NoiseAlgorithm(Enum):
@@ -10,18 +13,23 @@ class NoiseAlgorithm(Enum):
 
 
 class NoiseValue(Enum):
-    CONSTANT_UNKNOWN = "constant_unknown"
-    VARIABLE_UNKNOWN = "variable_unknown"
+    UNKNOWN_CONSTANT = "const"
+    UNKNOWN_VARIABLE = "var"
     KNOWN = "known"
 
 
 class Pipeline(Enum):
-    MSE = auto()
-    SSDN = auto()
+    MSE = "mse"
+    SSDN = "ssdn"
+
+
+class Blindspot(Enum):
+    ENABLED = "blindspot"
+    DISABLED = "normal"
 
 
 class ConfigValue(Enum):
-    # Denoiser Modes
+    INFER_CFG = auto()
     ALGORITHM = auto()
     BLINDSPOT = auto()
     PIPELINE = auto()
@@ -32,20 +40,23 @@ class ConfigValue(Enum):
     LEARNING_RATE = auto()
     LR_RAMPUP_FRACTION = auto()
     LR_RAMPDOWN_FRACTION = auto()
-    # SSDN Pipeline Configuration
-    NOISE_VALUE_STATE = auto()
+
+    NOISE_VALUE = auto()
     DIAGONAL_COVARIANCE = auto()
-    # Training Loop Configuration
+
     EVAL_INTERVAL = auto()
     PRINT_INTERVAL = auto()
+    SNAPSHOT_INTERVAL = auto()
     TRAIN_ITERATIONS = auto()
 
     DATALOADER_WORKERS = auto()
+    TRAIN_DATASET_NAME = auto()
     TRAIN_DATASET_TYPE = auto()
     TRAIN_DATA_PATH = auto()
     TRAIN_PATCH_SIZE = auto()
     TRAIN_MINIBATCH_SIZE = auto()
 
+    TEST_DATASET_NAME = auto()
     TEST_DATASET_TYPE = auto()
     TEST_DATA_PATH = auto()
     TEST_MINIBATCH_SIZE = auto()
@@ -59,28 +70,26 @@ class DatasetType(Enum):
 
 class StateValue(Enum):
     INITIALISED = auto()
-    EVAL_MODE = auto()
+    MODE = auto()
 
-    INPUT = auto()
     ITERATION = auto()
+    # TRAIN_IMAGE_COUNT = auto()
     REFERENCE = auto()
     HISTORY = auto()
 
 
 class HistoryValue(Enum):
-    PSNR = auto()
-    LOSS = auto()
-
-
-class DenoiserMode(Enum):
     TRAIN = auto()
     EVAL = auto()
+    TIMINGS = auto()
 
 
 class PipelineOutput(Enum):
     INPUTS = auto()
+    LOSS = auto()
+
     IMG_DENOISED = auto()
     IMG_MU = auto()
-    IMG_PME = auto()
-    LOSS = auto()
+
     NOISE_STD_DEV = auto()
+    MODEL_STD_DEV = auto()

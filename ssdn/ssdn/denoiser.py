@@ -2,19 +2,12 @@ from __future__ import annotations
 
 
 import torch
-import torch.optim as optim
 import torch.nn as nn
-import itertools
 
-import ssdn
-
-from torch.utils.data import DataLoader
-from torch.optim import Optimizer
 from torch import Tensor
 
 from ssdn.params import (
     ConfigValue,
-    StateValue,
     NoiseAlgorithm,
     PipelineOutput,
     Pipeline,
@@ -24,21 +17,30 @@ from ssdn.params import (
 from ssdn.models import NoiseNetwork
 from ssdn.datasets import NoisyDataset
 
-from typing import Dict
-from tqdm import tqdm
+from typing import Dict, List
 
 
-class Denoiser:
+class Denoiser(nn.Module):
 
     MODEL = "denoiser_model"
-    PARAM_ESTIMATION = "param_estimation_model"
-    ESTIMATED_PARAM = "estimated_param"
+    SIGMA_ESTIMATOR = "sigma_estimation_model"
+    ESTIMATED_SIGMA = "estimated_sigma"
 
-    def __init__(self, cfg: Dict, state: Dict = {}, device: str = None):
+    def __init__(
+        self, cfg: Dict, device: str = None,
+    ):
+        super().__init__()
+        # Configure device
+        if device:
+            device = torch.device(device)
+        else:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Store the denoiser configuration. Use the algorithm to infer
+        # pipeline and model settings if not already set
         self.cfg = cfg
-        self.state = state
+        Denoiser.infer_cfg(cfg)
 
         # Models to use during training, these can be parallelised
         self.models = nn.ModuleDict()
@@ -46,55 +48,32 @@ class Denoiser:
         self._models = nn.ModuleDict()
         # Initialise networks using current configuration
         self.init_networks()
-
         # Learnable parameters
-        self.parameters = nn.ParameterDict()
-        self.init_parameters()
-
-        # Refresh optimiser for parameters
-        self.init_optimiser()
-
-        # Initialise training state
-        if StateValue.INITIALISED not in self.state:
-            self.init_state()
-
-            self.testloader = None
-            self.trainloader = None
-
-    def init_state(self):
-        self.state[StateValue.INITIALISED] = True
-        self.state[StateValue.ITERATION] = 0
-        self.state[StateValue.EVAL_MODE] = False
-        self.state[StateValue.HISTORY] = {}
+        self.l_params = nn.ParameterDict()
+        self.init_l_params()
 
     def init_networks(self):
         # Create general denoising model
         self.add_model(
             Denoiser.MODEL, NoiseNetwork(blindspot=self.cfg[ConfigValue.BLINDSPOT])
         )
-        # Create separate model for parameter estimation
+        # Create separate model for variable parameter estimation
         if (
             self.cfg[ConfigValue.PIPELINE] == Pipeline.SSDN
-            and self.cfg[ConfigValue.NOISE_VALUE_STATE] == NoiseValue.VARIABLE_UNKNOWN
+            and self.cfg[ConfigValue.NOISE_VALUE] == NoiseValue.UNKNOWN_VARIABLE
         ):
-            # TODO: Do we need to add a flag for zeroing last set of biases
             self.add_model(
-                Denoiser.PARAM_ESTIMATION, NoiseNetwork(out_channels=1, blindspot=False)
+                Denoiser.SIGMA_ESTIMATOR,
+                NoiseNetwork(out_channels=1, blindspot=False, zero_output_weights=True),
             )
 
-    def init_parameters(self):
-        # if (
-        #     self.cfg[ConfigValue.PIPELINE] == Pipeline.SSDN
-        #     and self.cfg[ConfigValue.NOISE_VALUE_STATE] == NoiseValue.CONSTANT_UNKNOWN
-        # ):
-        init_value = torch.zeros((1, 1, 1, 1))
-        self.parameters[Denoiser.ESTIMATED_PARAM] = nn.Parameter(init_value)
-
-    def init_optimiser(self):
-        parameters = itertools.chain(
-            self.models.parameters(), self.parameters.parameters()
-        )
-        self._optimizer = optim.Adam(parameters, betas=[0.9, 0.99])
+    def init_l_params(self):
+        if (
+            self.cfg[ConfigValue.PIPELINE] == Pipeline.SSDN
+            and self.cfg[ConfigValue.NOISE_VALUE] == NoiseValue.UNKNOWN_CONSTANT
+        ):
+            init_value = torch.zeros((1, 1, 1, 1))
+            self.l_params[Denoiser.ESTIMATED_SIGMA] = nn.Parameter(init_value)
 
     def get_model(self, model_id: str, parallelised: bool = True) -> nn.Module:
         model_dict = self.models if parallelised else self._models
@@ -110,146 +89,7 @@ class Denoiser:
         parallel_model.to(self.device)
         self.models[model_id] = parallel_model
 
-    def eval(self):
-        self.models.eval()
-        # for model in self.models.values():
-        #     self.network.eval()
-
-    def train(self, trainloader: DataLoader, testloader: DataLoader = None):
-        self.cfg[ConfigValue.TRAIN_ITERATIONS] = len(trainloader)
-        prog_bar = tqdm(
-            total=self.cfg[ConfigValue.TRAIN_ITERATIONS],
-            initial=self.state[StateValue.ITERATION],
-        )
-        data_itr = iter(trainloader)
-        while (
-            self.state[StateValue.ITERATION] < self.cfg[ConfigValue.TRAIN_ITERATIONS]
-        ):
-            data = next(data_itr)
-            outputs = self.run_pipeline(data, True)
-            prog_bar.update()
-            self.state[StateValue.ITERATION] += 1  # actual batch size
-            if (
-                testloader is not None
-                and (
-                    self.state[StateValue.ITERATION]
-                    % self.cfg[ConfigValue.EVAL_INTERVAL]
-                )
-                == 0
-            ):
-                self.evaluate(testloader)
-
-    # def evaluate(self, testloader: DataLoader):
-    #     for data, indexes in testloader:
-    #         outputs = self.run_pipeline(data, False)
-    #         (dirty, _), (reference, _) = outputs[PipelineOutput.INPUTS]
-
-    #         cleaned = outputs[PipelineOutput.IMG_DENOISED].cpu()
-    #         joined = torch.cat((dirty, cleaned, reference), axis=3)
-    #         joined = joined.detach().numpy()
-    #         for i in range(joined.shape[0]):
-    #             single_joined = joined[i]
-    #             # joined = np.clip(joined, 0, 1)
-    #             # psnr = 20 * math.log10(1) - 10 * math.log10(mse)
-    #             single_joined = single_joined.transpose(1, 2, 0)
-    #             # print("{},{},{}".format(i, mse, psnr))
-    #             im = Image.fromarray(np.uint8(single_joined * 255))
-    #             im.save("results/{}.jpeg".format(indexes[i]))
-
-    def run_pipeline(self, data: Tensor, train: bool, **kwargs):
-        if self.cfg[ConfigValue.PIPELINE] == Pipeline.MSE:
-            return self._mse_pipeline(data, train, **kwargs)
-        elif self.cfg[ConfigValue.PIPELINE] == Pipeline.SSDN:
-            return self._ssdn_pipeline(data, train, **kwargs)
-        else:
-            raise NotImplementedError("Unsupported processing pipeline")
-
-    def _ssdn_pipeline(self, data: Tensor, train: bool, **kwargs) -> Dict:
-        # Equivalent of blindspot_pipeline
-        pass
-
-    def _mse_pipeline(self, data: Tensor, train: bool, **kwargs) -> Dict:
-        # Equivalent of simple_pipeline
-        inp, ref = data[NoisyDataset.INPUT], data[NoisyDataset.REFERENCE]
-        inp, ref = inp.to(self.device), ref.to(self.device)
-
-        if train:
-            optimizer = self.optimizer
-            optimizer.zero_grad()
-            inp.requires_grad = True
-            ref.requires_grad = True
-
-        cleaned = self.models[Denoiser.MODEL](inp)
-        # Do MSE but preserve individual loss per batch
-        loss = nn.MSELoss(reduction="none")(cleaned, ref)
-        loss = loss.view(loss.shape[0], -1).mean(1, keepdim=True)
-
-        if train:
-            # Train using average loss across batch
-            torch.mean(loss).backward()
-            optimizer.step()
-
-        return {
-            PipelineOutput.INPUTS: data,
-            PipelineOutput.IMG_DENOISED: cleaned,
-            PipelineOutput.LOSS: loss,
-        }
-
-    @property
-    def optimizer(self) -> Optimizer:
-        learning_rate = ssdn.utils.compute_ramped_lrate(
-            self.state[StateValue.ITERATION],
-            self.cfg[ConfigValue.TRAIN_ITERATIONS],
-            self.cfg[ConfigValue.LR_RAMPDOWN_FRACTION],
-            self.cfg[ConfigValue.LR_RAMPUP_FRACTION],
-            self.cfg[ConfigValue.LEARNING_RATE],
-        )
-        for param_group in self._optimizer.param_groups:
-            param_group["lr"] = learning_rate
-        return self._optimizer
-
-    def state_dict(self) -> Dict:
-        state_dict = {}
-        # Add model weights to state dict
-        state_dict["models"] = {}
-        for model_name, model in self._models.items():
-            state_dict["models"][model_name] = model.state_dict()
-        # Add learnable parameters to state dict
-        state_dict["parameters"] = {}
-        for parameter_name, parameter in self.parameters.items():
-            state_dict["parameters"][parameter_name] = parameter
-        # Store for maintaining training
-        state_dict["cfg"] = self.cfg
-        state_dict["state"] = self.state
-        state_dict["optimizer"] = self.optimizer.state_dict()
-        state_dict["rng"] = torch.get_rng_state()
-        return state_dict
-
-    @staticmethod
-    def from_state_dict(state_dict: str) -> Denoiser:
-        # Initialise RNG
-        torch.set_rng_state(state_dict["rng"])
-        denoiser = Denoiser(state_dict["cfg"], state_dict["state"])
-        # Load model weights
-        for model_name, model_state_dict in state_dict["models"].items():
-            model = denoiser.get_model(model_name, parallelised=False)
-            model.load_state_dict(model_state_dict)
-        # Load learnable parameters
-        for parameter_name, value in state_dict["parameters"].items():
-            denoiser.parameters[parameter_name] = nn.Parameter(value)
-
-        # Load optimiser
-        denoiser.optimizer.load_state_dict(state_dict["optimizer"])
-        return denoiser
-
-    def save(self, path: str):
-        torch.save(self.state_dict(), path)
-
-    @staticmethod
-    def load(path: str) -> Denoiser:
-        return Denoiser.from_state_dict(torch.load(path))
-
-    def __call__(self, data: Tensor) -> Tensor:
+    def forward(self, data: Tensor) -> Tensor:
         """Pass an input into the denoiser for inference. This will not train
         the network. Inference will be applied using current model state with
         the configured pipeline.
@@ -260,6 +100,130 @@ class Denoiser:
         Returns:
             Tensor: Denoised image or images.
         """
-        model = self.models[Denoiser.MODEL]
-        data = data.to(self.device)
-        return model(data)
+        assert NoisyDataset.INPUT == 0
+        inputs = [data]
+        outputs = self.run_pipeline(inputs)
+        return outputs[PipelineOutput.IMG_DENOISED]
+
+    def run_pipeline(self, data: List, **kwargs):
+        if self.cfg[ConfigValue.PIPELINE] == Pipeline.MSE:
+            return self._mse_pipeline(data, **kwargs)
+        elif self.cfg[ConfigValue.PIPELINE] == Pipeline.SSDN:
+            return self._ssdn_pipeline(data, **kwargs)
+        else:
+            raise NotImplementedError("Unsupported processing pipeline")
+
+    def _mse_pipeline(self, data: List, **kwargs) -> Dict:
+        outputs = {PipelineOutput.INPUTS: data}
+        # Run the input through the model
+        inp = data[NoisyDataset.INPUT].to(self.device)
+        inp.requires_grad = True
+        cleaned = self.models[Denoiser.MODEL](inp)
+        outputs[PipelineOutput.IMG_DENOISED] = cleaned
+
+        # If reference images are provided calculate the loss
+        # as MSE whilst preserving individual loss per batch
+        if len(data) >= NoisyDataset.REFERENCE:
+            ref = data[NoisyDataset.REFERENCE].to(self.device)
+            ref.requires_grad = True
+            loss = nn.MSELoss(reduction="none")(cleaned, ref)
+            loss = loss.view(loss.shape[0], -1).mean(1, keepdim=True)
+            outputs[PipelineOutput.LOSS] = loss
+
+        return outputs
+
+    def _ssdn_pipeline(self, data: List, **kwargs) -> Dict:
+        return {
+            PipelineOutput.INPUTS: data,
+            PipelineOutput.LOSS: torch.tensor(1.23, requires_grad=True),
+            PipelineOutput.IMG_MU: data[NoisyDataset.INPUT],
+            PipelineOutput.IMG_DENOISED: data[NoisyDataset.INPUT],
+            PipelineOutput.NOISE_STD_DEV: torch.tensor(0.252),
+            PipelineOutput.MODEL_STD_DEV: torch.tensor(23.242),
+        }
+        # Equivalent of blindspot_pipeline
+        raise NotImplementedError()
+
+    def state_dict(self, params_only: bool = False) -> Dict:
+        state_dict = state_dict = super().state_dict()
+        if not params_only:
+            state_dict["cfg"] = self.cfg
+        return state_dict
+
+    @staticmethod
+    def from_state_dict(state_dict: str) -> Denoiser:
+        denoiser = Denoiser(state_dict["cfg"])
+        denoiser.load_state_dict(state_dict, strict=False)
+        return denoiser
+
+    def config_name(self) -> str:
+        return Denoiser._config_name(self.cfg)
+
+    @staticmethod
+    def infer_cfg(cfg: Dict) -> Dict:
+        if cfg.get(ConfigValue.PIPELINE, None) is None:
+            cfg[ConfigValue.PIPELINE] = Denoiser.infer_pipeline(
+                cfg[ConfigValue.ALGORITHM]
+            )
+        if cfg.get(ConfigValue.BLINDSPOT, None) is None:
+            cfg[ConfigValue.BLINDSPOT] = Denoiser.infer_blindspot(
+                cfg[ConfigValue.ALGORITHM]
+            )
+        return cfg
+
+    @staticmethod
+    def infer_pipeline(algorithm: NoiseAlgorithm) -> Pipeline:
+        if algorithm in [NoiseAlgorithm.SELFSUPERVISED_DENOISING]:
+            return Pipeline.SSDN
+        elif algorithm in [
+            NoiseAlgorithm.SELFSUPERVISED_DENOISING_MEAN_ONLY,
+            NoiseAlgorithm.NOISE_TO_NOISE,
+            NoiseAlgorithm.NOISE_TO_CLEAN,
+        ]:
+            return Pipeline.MSE
+        else:
+            raise NotImplementedError("Algorithm does not have a default pipeline.")
+
+    @staticmethod
+    def infer_blindspot(algorithm: NoiseAlgorithm):
+        if algorithm in [
+            NoiseAlgorithm.SELFSUPERVISED_DENOISING,
+            NoiseAlgorithm.SELFSUPERVISED_DENOISING_MEAN_ONLY,
+        ]:
+            return True
+        elif algorithm in [
+            NoiseAlgorithm.NOISE_TO_NOISE,
+            NoiseAlgorithm.NOISE_TO_CLEAN,
+        ]:
+            return False
+        else:
+            raise NotImplementedError("Not known if algorithm requires blindspot.")
+
+    @staticmethod
+    def _config_name(cfg: Dict) -> str:
+        cfg = Denoiser.infer_cfg(cfg)
+        config_lst = [cfg[ConfigValue.ALGORITHM].value]
+
+        # Check if pipeline cannot be inferred
+        inferred_pipeline = Denoiser.infer_pipeline(cfg[ConfigValue.ALGORITHM])
+        if cfg[ConfigValue.PIPELINE] != inferred_pipeline:
+            config_lst += [cfg[ConfigValue.PIPELINE].value + "_pipeline"]
+        # Check if blindspot enable cannot be inferred
+        inferred_blindspot = Denoiser.infer_blindspot(cfg[ConfigValue.ALGORITHM])
+        if cfg[ConfigValue.BLINDSPOT] != inferred_blindspot:
+            config_lst += [
+                "blindspot" if cfg[ConfigValue.BLINDSPOT] else "blindspot_disabled"
+            ]
+        # Add noise information
+        config_lst += [cfg[ConfigValue.NOISE_STYLE]]
+        if cfg[ConfigValue.PIPELINE] in [Pipeline.SSDN]:
+            config_lst += ["sigma_" + cfg[ConfigValue.NOISE_VALUE].value]
+
+        if cfg[ConfigValue.IMAGE_CHANNELS] == 1:
+            config_lst += ["mono"]
+        if cfg[ConfigValue.PIPELINE] in [Pipeline.SSDN]:
+            if cfg[ConfigValue.DIAGONAL_COVARIANCE]:
+                config_lst += ["diag"]
+
+        config_name = "-".join(config_lst)
+        return config_name
