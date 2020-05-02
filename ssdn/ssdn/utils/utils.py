@@ -8,10 +8,12 @@ import torch
 import torch.nn.functional as F
 import re
 import os
+import time
 
-from typing import Any, List
+from typing import Any, List, Dict
 from torch import Tensor
 from contextlib import contextmanager
+from collections import defaultdict
 
 
 def compute_ramped_lrate(
@@ -41,12 +43,12 @@ def mse2psnr(mse: Tensor, float_imgs: bool = True):
     return 20 * torch.log10(high_val) - 10 * torch.log10(mse)
 
 
-def calculate_psnr(img: Tensor, ref: Tensor, keep_batch: bool = True):
-    if keep_batch:
-        mse = F.mse_loss(img,  ref, reduction="none")
+def calculate_psnr(img: Tensor, ref: Tensor, batched: bool = True):
+    if batched:
+        mse = F.mse_loss(img, ref, reduction="none")
         mse = mse.view(mse.shape[0], -1).mean(1, keepdim=True)
     else:
-        mse = F.mse_loss(img,  ref, reduction="mean")
+        mse = F.mse_loss(img, ref, reduction="mean")
     return mse2psnr(mse, img.is_floating_point())
 
 
@@ -80,3 +82,54 @@ def cd(newdir: str):
         yield
     finally:
         os.chdir(prevdir)
+
+
+class TrackedTime:
+    """Class for tracking an ongoing total time. Every update tracks the previous
+    time for future updates.
+    """
+
+    def __init__(self):
+        self.total = 0
+        self.last_time = None
+
+    def update(self):
+        """Update the total time with the time since the last tracked time.
+        """
+        current_time = time.time()
+        if self.last_time is not None:
+            self.total += current_time - self.last_time
+        self.last_time = current_time
+
+    def forget(self):
+        """Clear the last tracked time.
+        """
+        self.last_time = None
+
+    @staticmethod
+    def defaultdict() -> Dict:
+        return defaultdict(TrackedTime)
+
+
+def seconds_to_dhms(seconds: float, trim: bool = True) -> str:
+    """Convert time in seconds to a string of seconds, minutes, hours, days.
+
+    Args:
+        seconds (float): Time to convert.
+        trim (bool, optional): Whether to remove leading time units if not needed.
+
+    Returns:
+        str: String representation of time.
+    """
+    s = seconds % 60
+    m = (seconds // 60) % 60
+    h = seconds // (60 * 60) % 24
+    d = seconds // (60 * 60 * 24)
+    times = [(d, "d"), (h, "h"), (m, "m"), (s, "s")]
+    time_str = ""
+    for t, char in times:
+        if trim and t < 1:
+            continue
+        trim = False
+        time_str += "{:02}{}".format(int(t), char)
+    return time_str
