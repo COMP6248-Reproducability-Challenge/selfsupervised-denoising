@@ -38,20 +38,6 @@ def compute_ramped_lrate(
     return learning_rate
 
 
-def mse2psnr(mse: Tensor, float_imgs: bool = True):
-    high_val = torch.tensor(1.0) if float_imgs else torch.tensor(255)
-    return 20 * torch.log10(high_val) - 10 * torch.log10(mse)
-
-
-def calculate_psnr(img: Tensor, ref: Tensor, batched: bool = True):
-    if batched:
-        mse = F.mse_loss(img, ref, reduction="none")
-        mse = mse.view(mse.shape[0], -1).mean(1, keepdim=True)
-    else:
-        mse = F.mse_loss(img, ref, reduction="mean")
-    return mse2psnr(mse, img.is_floating_point())
-
-
 def list_constants(clazz: Any, private: bool = False) -> List[Any]:
     """Fetch all values from variables formatted as constants in a class.
 

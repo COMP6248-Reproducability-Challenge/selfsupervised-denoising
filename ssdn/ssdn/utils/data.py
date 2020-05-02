@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torchvision
+import torch.nn.functional as F
 
 from torch import Tensor
 
@@ -89,6 +90,19 @@ def tensor2image(img: Tensor, data_format: str = DataFormat.CHW) -> Image:
         )
     return Image.fromarray(np.uint8(np_img * 255), mode=mode)
 
+
+def mse2psnr(mse: Tensor, float_imgs: bool = True):
+    high_val = torch.tensor(1.0) if float_imgs else torch.tensor(255)
+    return 20 * torch.log10(high_val) - 10 * torch.log10(mse)
+
+
+def calculate_psnr(img: Tensor, ref: Tensor, data_format: str = DataFormat.BCHW):
+    dim_indexes = dict(DATA_FORMAT_DIM_INDEX[data_format])  # shallow copy
+    dim_indexes.pop(DataDim.BATCH, None)
+    dims = tuple(dim_indexes.values())
+    mse = F.mse_loss(img, ref, reduction="none")
+    mse = torch.mean(mse, dim=dims)
+    return mse2psnr(mse, img.is_floating_point())
 
 def show_tensor_image(img: Tensor, data_format: str = DataFormat.CHW):
     pil_img = tensor2image(img, data_format=data_format)
