@@ -104,6 +104,7 @@ def calculate_psnr(img: Tensor, ref: Tensor, data_format: str = DataFormat.BCHW)
     mse = torch.mean(mse, dim=dims)
     return mse2psnr(mse, img.is_floating_point())
 
+
 def show_tensor_image(img: Tensor, data_format: str = DataFormat.CHW):
     pil_img = tensor2image(img, data_format=data_format)
     pil_img.show()

@@ -13,7 +13,6 @@ import time
 from typing import Any, List, Dict
 from torch import Tensor
 from contextlib import contextmanager
-from collections import defaultdict
 
 
 def compute_ramped_lrate(
@@ -92,10 +91,6 @@ class TrackedTime:
         """
         self.last_time = None
 
-    @staticmethod
-    def defaultdict() -> Dict:
-        return defaultdict(TrackedTime)
-
 
 def seconds_to_dhms(seconds: float, trim: bool = True) -> str:
     """Convert time in seconds to a string of seconds, minutes, hours, days.
@@ -119,3 +114,47 @@ def seconds_to_dhms(seconds: float, trim: bool = True) -> str:
         trim = False
         time_str += "{:02}{}".format(int(t), char)
     return time_str
+
+
+class Metric:
+    """ Only works if batch is in first dim.
+    """
+
+    def __init__(self, batched: bool = True, collapse: bool = True):
+        self.reset()
+        self.batched = batched
+        self.collapse = collapse
+
+    def add(self, value: Tensor):
+        n = value.shape[0] if self.batched else 1
+        if self.collapse:
+            data_start = 1 if self.batched else 0
+            mean_dims = list(range(data_start, len(value.shape)))
+            if len(mean_dims) > 0:
+                value = torch.mean(value, dim=mean_dims)
+        if self.batched:
+            value = torch.sum(value, dim=0)
+        if self.total is None:
+            self.total = value
+        else:
+            self.total += value
+        self.n += n
+
+    def __add__(self, value: Tensor):
+        self.add(value)
+        return self
+
+    def accumulated(self, reset: bool = False):
+        if self.n == 0:
+            return None
+        acc = self.total / self.n
+        if reset:
+            self.reset()
+        return acc
+
+    def reset(self):
+        self.total = None
+        self.n = 0
+
+    def empty(self) -> bool:
+        return self.n == 0
