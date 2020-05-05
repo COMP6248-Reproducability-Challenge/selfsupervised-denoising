@@ -158,3 +158,7 @@ class Metric:
 
     def empty(self) -> bool:
         return self.n == 0
+
+
+def separator(cols=100) -> str:
+    return "#" * cols

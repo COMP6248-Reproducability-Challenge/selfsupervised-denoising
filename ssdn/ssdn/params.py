@@ -73,7 +73,6 @@ class StateValue(Enum):
     MODE = auto()
 
     ITERATION = auto()
-    # TRAIN_IMAGE_COUNT = auto()
     REFERENCE = auto()
     HISTORY = auto()
 
@@ -86,10 +85,8 @@ class HistoryValue(Enum):
 
 class PipelineOutput(Enum):
     INPUTS = auto()
-    LOSS = auto()
-
-    IMG_DENOISED = auto()
-    IMG_MU = auto()
-
-    NOISE_STD_DEV = auto()
-    MODEL_STD_DEV = auto()
+    LOSS = "loss"
+    IMG_DENOISED = "out"
+    IMG_MU = "out_mu"
+    NOISE_STD_DEV = "noise_std"
+    MODEL_STD_DEV = "model_std"

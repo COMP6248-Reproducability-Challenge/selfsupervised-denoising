@@ -1,23 +1,26 @@
 import os
 
-from ssdn.params import ConfigValue, DatasetType
+from ssdn.params import ConfigValue, DatasetType, NoiseAlgorithm, Pipeline
 from typing import Dict
+
+
+DEFAULT_RUN_DIR = "runs"
 
 
 def base():
     return {
-        ConfigValue.TRAIN_ITERATIONS: 100,
-        ConfigValue.TRAIN_MINIBATCH_SIZE: 2,
+        ConfigValue.TRAIN_ITERATIONS: 20,
+        ConfigValue.TRAIN_MINIBATCH_SIZE: 1,
         ConfigValue.TEST_MINIBATCH_SIZE: 2,
         ConfigValue.IMAGE_CHANNELS: 3,
         ConfigValue.TRAIN_PATCH_SIZE: 256,
         ConfigValue.LEARNING_RATE: 3e-4,
         ConfigValue.LR_RAMPDOWN_FRACTION: 0.1,
         ConfigValue.LR_RAMPUP_FRACTION: 0.3,
-        ConfigValue.EVAL_INTERVAL: 10,
-        ConfigValue.PRINT_INTERVAL: 10,
-        ConfigValue.SNAPSHOT_INTERVAL: 10,
-        ConfigValue.DATALOADER_WORKERS: 8,
+        ConfigValue.EVAL_INTERVAL: 4,
+        ConfigValue.PRINT_INTERVAL: 2,
+        ConfigValue.SNAPSHOT_INTERVAL: 1000,
+        ConfigValue.DATALOADER_WORKERS: 4,
         ConfigValue.PIN_DATA_MEMORY: False,
         ConfigValue.DIAGONAL_COVARIANCE: False,
         ConfigValue.TRAIN_DATASET_TYPE: None,
@@ -40,7 +43,7 @@ def infer_datasets(cfg: Dict):
     a h5 file or a folder.
 
     Args:
-        cfg (Dict): [description]
+        cfg (Dict): Configuration to infer for.
     """
 
     def infer_dname(path: str):
@@ -106,3 +109,71 @@ def test_length(dataset_name: str) -> int:
         DatasetName.SET14: 280,  # 20 x Testset Length
     }
     return mapping[dataset_name]
+
+
+def infer_pipeline(algorithm: NoiseAlgorithm) -> Pipeline:
+    if algorithm in [NoiseAlgorithm.SELFSUPERVISED_DENOISING]:
+        return Pipeline.SSDN
+    elif algorithm in [
+        NoiseAlgorithm.SELFSUPERVISED_DENOISING_MEAN_ONLY,
+        NoiseAlgorithm.NOISE_TO_NOISE,
+        NoiseAlgorithm.NOISE_TO_CLEAN,
+    ]:
+        return Pipeline.MSE
+    else:
+        raise NotImplementedError("Algorithm does not have a default pipeline.")
+
+
+def infer_blindspot(algorithm: NoiseAlgorithm):
+    if algorithm in [
+        NoiseAlgorithm.SELFSUPERVISED_DENOISING,
+        NoiseAlgorithm.SELFSUPERVISED_DENOISING_MEAN_ONLY,
+    ]:
+        return True
+    elif algorithm in [
+        NoiseAlgorithm.NOISE_TO_NOISE,
+        NoiseAlgorithm.NOISE_TO_CLEAN,
+    ]:
+        return False
+    else:
+        raise NotImplementedError("Not known if algorithm requires blindspot.")
+
+
+def infer(cfg: Dict, model_only: bool = False) -> Dict:
+    if cfg.get(ConfigValue.PIPELINE, None) is None:
+        cfg[ConfigValue.PIPELINE] = infer_pipeline(cfg[ConfigValue.ALGORITHM])
+    if cfg.get(ConfigValue.BLINDSPOT, None) is None:
+        cfg[ConfigValue.BLINDSPOT] = infer_blindspot(cfg[ConfigValue.ALGORITHM])
+
+    if not model_only:
+        infer_datasets(cfg)
+    return cfg
+
+
+def config_name(cfg: Dict) -> str:
+    cfg = infer(cfg)
+    config_lst = [cfg[ConfigValue.ALGORITHM].value]
+
+    # Check if pipeline cannot be inferred
+    inferred_pipeline = infer_pipeline(cfg[ConfigValue.ALGORITHM])
+    if cfg[ConfigValue.PIPELINE] != inferred_pipeline:
+        config_lst += [cfg[ConfigValue.PIPELINE].value + "_pipeline"]
+    # Check if blindspot enable cannot be inferred
+    inferred_blindspot = infer_blindspot(cfg[ConfigValue.ALGORITHM])
+    if cfg[ConfigValue.BLINDSPOT] != inferred_blindspot:
+        config_lst += [
+            "blindspot" if cfg[ConfigValue.BLINDSPOT] else "blindspot_disabled"
+        ]
+    # Add noise information
+    config_lst += [cfg[ConfigValue.NOISE_STYLE]]
+    if cfg[ConfigValue.PIPELINE] in [Pipeline.SSDN]:
+        config_lst += ["sigma_" + cfg[ConfigValue.NOISE_VALUE].value]
+
+    if cfg[ConfigValue.IMAGE_CHANNELS] == 1:
+        config_lst += ["mono"]
+    if cfg[ConfigValue.PIPELINE] in [Pipeline.SSDN]:
+        if cfg[ConfigValue.DIAGONAL_COVARIANCE]:
+            config_lst += ["diag"]
+
+    config_name = "-".join(config_lst)
+    return config_name

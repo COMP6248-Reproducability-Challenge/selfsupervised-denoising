@@ -65,7 +65,7 @@ def setup(log_dir: str = None, filename: str = None):
         file_path = os.path.join(log_dir, filename)
 
         # Configure logging to a file
-        file = logging.FileHandler(file_path, mode="w")
+        file = logging.FileHandler(file_path, mode="a")
         formatter = logging.Formatter(fmt=FILE_FORMAT, datefmt=FILE_DATE_FORMAT)
         file.setLevel(logging.DEBUG)
         file.setFormatter(formatter)

@@ -238,7 +238,9 @@ class NoisyDataset(Dataset):
         return [NoisyDataset._unpad_single(i, s) for i, s in zip(image, shape)]
 
     @staticmethod
-    def unpad(image: Tensor, metadata: Dict, batch_index: int = None) -> Union[Tensor, List[Tensor]]:
+    def unpad(
+        image: Tensor, metadata: Dict, batch_index: int = None
+    ) -> Union[Tensor, List[Tensor]]:
         """For a padded image or batch of padded images, undo padding. It is
         assumed that the original image is positioned in the top left and
         that the channel count has not changed.

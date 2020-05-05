@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
+import ssdn
 
 from torch import Tensor
 
 from ssdn.params import (
     ConfigValue,
-    NoiseAlgorithm,
     PipelineOutput,
     Pipeline,
     NoiseValue,
@@ -37,10 +37,8 @@ class Denoiser(nn.Module):
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.device = device
 
-        # Store the denoiser configuration. Use the algorithm to infer
-        # pipeline and model settings if not already set
+        # Store the denoiser configuration
         self.cfg = cfg
-        Denoiser.infer_cfg(cfg)
 
         # Models to use during training, these can be parallelised
         self.models = nn.ModuleDict()
@@ -191,7 +189,7 @@ class Denoiser(nn.Module):
             print("Num. output components:", num_output_components)
         # Call the NN with the current image etc.
         net_out = self.models[Denoiser.MODEL](noisy_in)
-        net_out = net_out.type(torch.float64)
+        # net_out = net_out.type(torch.float64)
         if debug:
             print("Net output shape:", net_out.shape)
         mu_x = net_out[:, 0:num_channels, ...]  # Means (NCHW).
@@ -237,11 +235,11 @@ class Denoiser(nn.Module):
             # Separate analysis network.
             param_est_net_out = self.models[Denoiser.SIGMA_ESTIMATOR](noisy_in)
             param_est_net_out = torch.mean(param_est_net_out, dim=(2, 3), keepdim=True)
-            noise_est_out = param_est_net_out.type(torch.float64)
+            noise_est_out = param_est_net_out  # .type(torch.float64)
 
         # Cast remaining data into float64.
-        noisy_in = noisy_in.type(torch.float64)
-        noise_params_in = noise_params_in.type(torch.float64)
+        # noisy_in = noisy_in.type(torch.float64)
+        # noise_params_in = noise_params_in.type(torch.float64)
 
         # Remap noise estimate to ensure it is always positive and starts near zero.
         if noise_params != NoiseValue.KNOWN:
@@ -253,7 +251,7 @@ class Denoiser(nn.Module):
         if noise_style.startswith("gauss"):
             if noise_params == NoiseValue.KNOWN:
                 noise_std = torch.max(
-                    noise_params_in, torch.tensor(1e-3, dtype=torch.float64)
+                    noise_params_in, torch.tensor(1e-3)  # , dtype=torch.float64)
                 )  # N111
             else:
                 noise_std = noise_est_out
@@ -262,25 +260,25 @@ class Denoiser(nn.Module):
         ):  # Simple signal-dependent Poisson approximation [Hasinoff 2012].
             if noise_params == NoiseValue.KNOWN:
                 noise_std = (
-                    torch.maximum(mu_x, torch.tensor(1e-3, dtype=torch.float64))
+                    torch.maximum(mu_x, torch.tensor(1e-3))  # , dtype=torch.float64))
                     / noise_params_in
                 ) ** 0.5  # NCHW
             else:
                 noise_std = (
-                    torch.maximum(mu_x, torch.tensor(1e-3, dtype=torch.float64))
+                    torch.maximum(mu_x, torch.tensor(1e-3))  # , dtype=torch.float64))
                     * noise_est_out
                 ) ** 0.5  # NCHW
 
         # Casts and vars.
-        noise_std = noise_std.type(torch.float64)
+        # noise_std = noise_std.type(torch.float64)
         noise_std = noise_std.to(self.device)
         # I = tf.eye(num_channels, batch_shape=[1, 1, 1], dtype=tf.float64)
-        I = torch.eye(num_channels, dtype=torch.float64, device=self.device)
+        I = torch.eye(num_channels, device=self.device)  # dtype=torch.float64
         I = I.reshape(
             1, 1, 1, num_channels, num_channels
         )  # Creates the same shape as the tensorflow thing did, wouldn't work for other batch shapes
         Ieps = I * 1e-6
-        zero64 = torch.tensor(0.0, dtype=torch.float64, device=self.device)
+        zero64 = torch.tensor(0.0, device=self.device)  # , dtype=torch.float64
 
         # Helpers.
         def batch_mvmul(m, v):  # Batched (M * v).
@@ -368,7 +366,7 @@ class Denoiser(nn.Module):
             PipelineOutput.IMG_DENOISED: pme_out,
             PipelineOutput.LOSS: loss_out,
             PipelineOutput.NOISE_STD_DEV: noise_std_out,
-            PipelineOutput.MODEL_STD_DEV: net_std_out[:, None, ...],
+            PipelineOutput.MODEL_STD_DEV: net_std_out,
         }
 
     def state_dict(self, params_only: bool = False) -> Dict:
@@ -378,79 +376,10 @@ class Denoiser(nn.Module):
         return state_dict
 
     @staticmethod
-    def from_state_dict(state_dict: str) -> Denoiser:
+    def from_state_dict(state_dict: Dict) -> Denoiser:
         denoiser = Denoiser(state_dict["cfg"])
         denoiser.load_state_dict(state_dict, strict=False)
         return denoiser
 
     def config_name(self) -> str:
-        return Denoiser._config_name(self.cfg)
-
-    @staticmethod
-    def infer_cfg(cfg: Dict) -> Dict:
-        if cfg.get(ConfigValue.PIPELINE, None) is None:
-            cfg[ConfigValue.PIPELINE] = Denoiser.infer_pipeline(
-                cfg[ConfigValue.ALGORITHM]
-            )
-        if cfg.get(ConfigValue.BLINDSPOT, None) is None:
-            cfg[ConfigValue.BLINDSPOT] = Denoiser.infer_blindspot(
-                cfg[ConfigValue.ALGORITHM]
-            )
-        return cfg
-
-    @staticmethod
-    def infer_pipeline(algorithm: NoiseAlgorithm) -> Pipeline:
-        if algorithm in [NoiseAlgorithm.SELFSUPERVISED_DENOISING]:
-            return Pipeline.SSDN
-        elif algorithm in [
-            NoiseAlgorithm.SELFSUPERVISED_DENOISING_MEAN_ONLY,
-            NoiseAlgorithm.NOISE_TO_NOISE,
-            NoiseAlgorithm.NOISE_TO_CLEAN,
-        ]:
-            return Pipeline.MSE
-        else:
-            raise NotImplementedError("Algorithm does not have a default pipeline.")
-
-    @staticmethod
-    def infer_blindspot(algorithm: NoiseAlgorithm):
-        if algorithm in [
-            NoiseAlgorithm.SELFSUPERVISED_DENOISING,
-            NoiseAlgorithm.SELFSUPERVISED_DENOISING_MEAN_ONLY,
-        ]:
-            return True
-        elif algorithm in [
-            NoiseAlgorithm.NOISE_TO_NOISE,
-            NoiseAlgorithm.NOISE_TO_CLEAN,
-        ]:
-            return False
-        else:
-            raise NotImplementedError("Not known if algorithm requires blindspot.")
-
-    @staticmethod
-    def _config_name(cfg: Dict) -> str:
-        cfg = Denoiser.infer_cfg(cfg)
-        config_lst = [cfg[ConfigValue.ALGORITHM].value]
-
-        # Check if pipeline cannot be inferred
-        inferred_pipeline = Denoiser.infer_pipeline(cfg[ConfigValue.ALGORITHM])
-        if cfg[ConfigValue.PIPELINE] != inferred_pipeline:
-            config_lst += [cfg[ConfigValue.PIPELINE].value + "_pipeline"]
-        # Check if blindspot enable cannot be inferred
-        inferred_blindspot = Denoiser.infer_blindspot(cfg[ConfigValue.ALGORITHM])
-        if cfg[ConfigValue.BLINDSPOT] != inferred_blindspot:
-            config_lst += [
-                "blindspot" if cfg[ConfigValue.BLINDSPOT] else "blindspot_disabled"
-            ]
-        # Add noise information
-        config_lst += [cfg[ConfigValue.NOISE_STYLE]]
-        if cfg[ConfigValue.PIPELINE] in [Pipeline.SSDN]:
-            config_lst += ["sigma_" + cfg[ConfigValue.NOISE_VALUE].value]
-
-        if cfg[ConfigValue.IMAGE_CHANNELS] == 1:
-            config_lst += ["mono"]
-        if cfg[ConfigValue.PIPELINE] in [Pipeline.SSDN]:
-            if cfg[ConfigValue.DIAGONAL_COVARIANCE]:
-                config_lst += ["diag"]
-
-        config_name = "-".join(config_lst)
-        return config_name
+        return ssdn.cfg.config_name(self.cfg)
