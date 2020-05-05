@@ -49,11 +49,11 @@ logger = logging.getLogger("ssdn.train")
 DEFAULT_CFG = ssdn.cfg.base()
 DEFAULT_CFG.update(
     {
-        ConfigValue.ALGORITHM: NoiseAlgorithm.NOISE_TO_CLEAN,
+        ConfigValue.ALGORITHM: NoiseAlgorithm.SELFSUPERVISED_DENOISING,
         ConfigValue.NOISE_STYLE: "gauss25",
         ConfigValue.NOISE_VALUE: NoiseValue.KNOWN,
-        ConfigValue.TRAIN_DATA_PATH: "C:/dsj/deep_learning/coursework/ilsvrc_val.h5",
-        ConfigValue.TEST_DATA_PATH: "D:/Downloads/Datasets/BSDS300/images/test",
+        ConfigValue.TRAIN_DATA_PATH: "/data/dsj1n15/datasets/ilsvrc_val.h5",
+        ConfigValue.TEST_DATA_PATH: "/data/dsj1n15/datasets/BSDS300/images/test",
     }
 )
 
@@ -539,9 +539,6 @@ class DenoiserTrainer:
                 outputs[output] = "_".join((prefix, key))
         return outputs
 
-    def calculate_psnrs():
-        pass
-
     @staticmethod
     def calculate_psnr(
         outputs: Dict, output: PipelineOutput, unpad: bool = True
@@ -560,6 +557,7 @@ class DenoiserTrainer:
             )
             psnr = torch.stack(list(psnrs))
         else:
+            clean = clean.to(outputs[output].device)
             psnr = ssdn.utils.calculate_psnr(outputs[output], clean)
         return psnr
 
@@ -601,7 +599,7 @@ class DenoiserTrainer:
         if self._run_dir is None:
             config_name = self.train_config_name()
             next_run_id = self.next_run_id()
-            run_dir_name = "train-{:05d}-{}".format(next_run_id, config_name)
+            run_dir_name = "{:05d}-{}".format(next_run_id, config_name)
             self._run_dir = run_dir_name
 
         return self._run_dir
@@ -856,7 +854,8 @@ def resume_run(run_dir: str, iteration: int = None) -> DenoiserTrainer:
     logger.info("Loaded training state.")
     # Cannot trust old absolute times so discard
     for timing in trainer.state[StateValue.HISTORY][HistoryValue.TIMINGS].values():
-        timing.forget()
+        if isinstance(timing, TrackedTime):
+            timing.forget()
     return trainer
 
 
@@ -868,12 +867,12 @@ if __name__ == "__main__":
     # torch.backends.cudnn.deterministic = True
     # torch.backends.cudnn.benchmark = False
 
-    # if True:
-    #     trainer = resume_run(
-    #         r"C:\dsj\deep_learning\coursework\git\runs\00145-n2c-gauss25"
-    #     )
-    #     trainer.train()
-    #     exit()
+    if True:
+        trainer = resume_run(
+            r"/data/dsj1n15/local/COMP6202-DL-Reproducibility-Challenge/runs/00000-train-ssdn-gauss25-sigma_known-iter5k"
+        )
+        trainer.train()
+        exit()
 
     trainer = DenoiserTrainer(DEFAULT_CFG)
     trainer.train()

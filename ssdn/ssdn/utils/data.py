@@ -68,7 +68,7 @@ def rotate(
 
 
 def tensor2image(img: Tensor, data_format: str = DataFormat.CHW) -> Image:
-    img = img.detach()
+    img = img.cpu().detach()
     # Create a grid of images if batched
     if isinstance(img, list) or len(img.shape) == 4:
         img = img.permute(permute_tuple(batch(data_format), DataFormat.BCHW))

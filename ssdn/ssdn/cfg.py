@@ -9,7 +9,7 @@ DEFAULT_RUN_DIR = "runs"
 
 def base():
     return {
-        ConfigValue.TRAIN_ITERATIONS: 20,
+        ConfigValue.TRAIN_ITERATIONS: 5000,
         ConfigValue.TRAIN_MINIBATCH_SIZE: 1,
         ConfigValue.TEST_MINIBATCH_SIZE: 2,
         ConfigValue.IMAGE_CHANNELS: 3,
@@ -17,8 +17,8 @@ def base():
         ConfigValue.LEARNING_RATE: 3e-4,
         ConfigValue.LR_RAMPDOWN_FRACTION: 0.1,
         ConfigValue.LR_RAMPUP_FRACTION: 0.3,
-        ConfigValue.EVAL_INTERVAL: 4,
-        ConfigValue.PRINT_INTERVAL: 2,
+        ConfigValue.EVAL_INTERVAL: 1000,
+        ConfigValue.PRINT_INTERVAL: 1000,
         ConfigValue.SNAPSHOT_INTERVAL: 1000,
         ConfigValue.DATALOADER_WORKERS: 4,
         ConfigValue.PIN_DATA_MEMORY: False,
