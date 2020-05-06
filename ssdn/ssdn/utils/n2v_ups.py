@@ -2,7 +2,7 @@ import numpy as np
 import math
 from random import randint
 
-def manipulate(image, subpatch_size = 5, inplace: bool = False):
+def manipulate(image, subpatch_size: int = 5, inplace: bool = False):
     """
     Take sub-patches from within an image at random coordinates
     to replace a given percentage of central pixels with a random

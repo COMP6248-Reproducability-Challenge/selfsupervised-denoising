@@ -118,7 +118,8 @@ class NoisyDataset(Dataset):
 
         # Create the noisy input images
         noisy_in, noisy_in_coeff = ssdn.utils.noise.add_style(clean, self.noise_style)
-        noisy_in = ssdn.utils.n2v_ups.manipulate(noisy_in, 5) # TODO use config for neighbourhood radius
+        if self.algorithm == NoiseAlgorithm.NOISE_TO_VOID:
+            noisy_in, mask = ssdn.utils.n2v_ups.manipulate(noisy_in, 5) # TODO use config for neighbourhood radius
         inp, inp_coeff = noisy_in, noisy_in_coeff
 
         # N2C requires noisy input and clean reference images
