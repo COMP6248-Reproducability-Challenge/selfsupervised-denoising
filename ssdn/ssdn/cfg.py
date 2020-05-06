@@ -120,6 +120,7 @@ def infer_pipeline(algorithm: NoiseAlgorithm) -> Pipeline:
         NoiseAlgorithm.NOISE_TO_CLEAN,
     ]:
         return Pipeline.MSE
+    elif algorithm in [NoiseAlgorithm.NOISE_TO_VOID]
     else:
         raise NotImplementedError("Algorithm does not have a default pipeline.")
 
@@ -133,6 +134,7 @@ def infer_blindspot(algorithm: NoiseAlgorithm):
     elif algorithm in [
         NoiseAlgorithm.NOISE_TO_NOISE,
         NoiseAlgorithm.NOISE_TO_CLEAN,
+        NoiseAlgorithm.NOISE_TO_VOID,
     ]:
         return False
     else:

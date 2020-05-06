@@ -21,6 +21,7 @@ class NoiseValue(Enum):
 class Pipeline(Enum):
     MSE = "mse"
     SSDN = "ssdn"
+    MASK_MSE = "mask_mse"
 
 
 class Blindspot(Enum):

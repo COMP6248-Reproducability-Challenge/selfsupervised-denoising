@@ -1,9 +1,15 @@
 import numpy as np
 import math
 from random import randint
+from torch import Tensor
 
-def manipulate(image, subpatch_size: int = 5, inplace: bool = False):
+def manipulate(
+    image: Tensor,
+    subpatch_size: int = 5,
+    inplace: bool = False
+):
     """
+    TODO: might need to do this with the same mask for each image?
     Take sub-patches from within an image at random coordinates
     to replace a given percentage of central pixels with a random
     pixel within the sub-patch (aka Uniform Pixel Selection).
@@ -21,15 +27,18 @@ def manipulate(image, subpatch_size: int = 5, inplace: bool = False):
     if not inplace:
         image = image.clone()
 
-    masked_coords = []
     image_x = image.shape[2]
     image_y = image.shape[3]
     subpatch_radius = math.floor(subpatch_size / 2)
-
     coords = get_stratified_coords((image_x, image_y))
+
+    masked_coords = []
+    mask_tensor = torch.zeros(image_x, image_y, dtype=int)
     for coord in zip(*coords):
         x, y = coord
         masked_coords.append((x,y))
+        mask_tensor[x, y] = 1
+
         min_x = min([x - subpatch_radius, 0])
         max_x = min([x + subpatch_radius, image_x - 1])
         min_y = min([y - subpatch_radius, 0])
@@ -40,7 +49,7 @@ def manipulate(image, subpatch_size: int = 5, inplace: bool = False):
 
         # Now replace pixel at x,y with pixel from rand_x,rand_y
         image[:, :, x, y] = image[:, :, rand_x, rand_y]
-    return image, masked_coords
+    return image, masked_coords, mask_tensor
 
 def rand_num_exclude(_min: int, _max: int, exclude: list):
     """

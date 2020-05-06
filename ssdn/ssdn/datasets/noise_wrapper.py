@@ -119,17 +119,19 @@ class NoisyDataset(Dataset):
         # Create the noisy input images
         noisy_in, noisy_in_coeff = ssdn.utils.noise.add_style(clean, self.noise_style)
         if self.algorithm == NoiseAlgorithm.NOISE_TO_VOID:
-            noisy_in, masked_coords = ssdn.utils.n2v_ups.manipulate(noisy_in, 5) # TODO use config for neighbourhood radius
+            noisy_in, masked_coords, mask_tensor = ssdn.utils.n2v_ups.manipulate(noisy_in, 5) # TODO use config for neighbourhood radius
             metadata['masked_coords'] = masked_coords
+            metadata['mask_tensor'] = mask_tensor
         inp, inp_coeff = noisy_in, noisy_in_coeff
 
         # N2C requires noisy input and clean reference images
         if self.algorithm == NoiseAlgorithm.NOISE_TO_CLEAN:
             ref, ref_coeff = clean, 0
-        # N2N requires noisy input and noisy reference images
-        elif self.algorithm == NoiseAlgorithm.NOISE_TO_NOISE:
-            ref, ref_coeff = ssdn.utils.noise.add_style(clean, self.noise_style)
-        elif self.algorithm == NoiseAlgorithm.NOISE_TO_VOID:
+        # N2N and N2V require noisy input and noisy reference images
+        elif (
+                self.algorithm == NoiseAlgorithm.NOISE_TO_NOISE or
+                self.algorithm == NoiseAlgorithm.NOISE_TO_VOID
+            ):
             ref, ref_coeff = ssdn.utils.noise.add_style(clean, self.noise_style)
         # SSDN requires noisy input and no reference images
         elif self.algorithm == NoiseAlgorithm.SELFSUPERVISED_DENOISING:

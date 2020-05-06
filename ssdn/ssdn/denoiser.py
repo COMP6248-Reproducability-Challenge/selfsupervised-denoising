@@ -130,6 +130,8 @@ class Denoiser(nn.Module):
             return self._mse_pipeline(data, **kwargs)
         elif self.cfg[ConfigValue.PIPELINE] == Pipeline.SSDN:
             return self._ssdn_pipeline(data, **kwargs)
+        elif self.cfg[ConfigValue.PIPELINE] == Pipeline.MASK_MSE:
+            return self._mask_mse_pipeline(data, **kwargs)
         else:
             raise NotImplementedError("Unsupported processing pipeline")
 
@@ -146,6 +148,26 @@ class Denoiser(nn.Module):
         if len(data) >= NoisyDataset.REFERENCE:
             ref = data[NoisyDataset.REFERENCE].to(self.device)
             ref.requires_grad = True
+            loss = nn.MSELoss(reduction="none")(cleaned, ref)
+            loss = loss.view(loss.shape[0], -1).mean(1, keepdim=True)
+            outputs[PipelineOutput.LOSS] = loss
+
+        return outputs
+
+    def _mask_mse_pipeline(self, data: List, **kwargs) -> Dict:
+        outputs = {PipelineOutput.INPUTS: data}
+        # Run the input through the model
+        inp = data[NoisyDataset.INPUT].to(self.device)
+        inp.requires_grad = True
+        cleaned = self.models[Denoiser.MODEL](inp)
+        outputs[PipelineOutput.IMG_DENOISED] = cleaned
+
+        # If reference images are provided calculate the loss
+        # as MSE whilst preserving individual loss per batch
+        if len(data) >= NoisyDataset.REFERENCE:
+            ref = data[NoisyDataset.REFERENCE].to(self.device)
+            ref.requires_grad = True
+            # TODO: change to use MSE loss only on masked pixels
             loss = nn.MSELoss(reduction="none")(cleaned, ref)
             loss = loss.view(loss.shape[0], -1).mean(1, keepdim=True)
             outputs[PipelineOutput.LOSS] = loss
