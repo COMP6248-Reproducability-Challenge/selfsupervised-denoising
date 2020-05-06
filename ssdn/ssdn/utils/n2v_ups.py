@@ -31,9 +31,9 @@ def manipulate(image, subpatch_size: int = 5, inplace: bool = False):
         x, y = coord
         masked_coords.append((x,y))
         min_x = min([x - subpatch_radius, 0])
-        max_x = min([x + subpatch_radius, image_y])
+        max_x = min([x + subpatch_radius, image_x - 1])
         min_y = min([y - subpatch_radius, 0])
-        max_y = min([y + subpatch_radius, image_y])
+        max_y = min([y + subpatch_radius, image_y -1])
 
         rand_x = rand_num_exclude(min_x, max_x, [x])
         rand_y = rand_num_exclude(min_y, max_y, [y])
@@ -54,33 +54,6 @@ def rand_num_exclude(_min: int, _max: int, exclude: list):
     """
     rand = randint(_min, _max)
     return rand_num_exclude(_min, _max, exclude) if rand in exclude else rand
-
-def pm_uniform_withCP(local_sub_patch_radius):
-    def random_neighbor_withCP_uniform(patch, coords, dims):
-        vals = []
-        for coord in zip(*coords):
-            # Take coord to be the center pixel.
-
-            #
-            sub_patch = get_subpatch(patch, coord,local_sub_patch_radius)
-            rand_coords = [np.random.randint(0, s) for s in sub_patch.shape[0:dims]]
-            vals.append(sub_patch[tuple(rand_coords)])
-        return vals
-    return random_neighbor_withCP_uniform
-
-
-def get_subpatch(patch, coord, local_sub_patch_radius):
-    start = np.maximum(0, np.array(coord) - local_sub_patch_radius)
-    end = start + local_sub_patch_radius*2 + 1
-
-    shift = np.minimum(0, patch.shape - end)
-
-    start += shift
-    end += shift
-
-    slices = [ slice(s, e) for s, e in zip(start, end)]
-
-    return patch[tuple(slices)]
 
 
 def get_stratified_coords(shape):
