@@ -13,7 +13,7 @@ def base():
         ConfigValue.TRAIN_MINIBATCH_SIZE: 1,
         ConfigValue.TEST_MINIBATCH_SIZE: 2,
         ConfigValue.IMAGE_CHANNELS: 3,
-        ConfigValue.TRAIN_PATCH_SIZE: 256,
+        ConfigValue.TRAIN_PATCH_SIZE: 64,
         ConfigValue.LEARNING_RATE: 3e-4,
         ConfigValue.LR_RAMPDOWN_FRACTION: 0.1,
         ConfigValue.LR_RAMPUP_FRACTION: 0.3,
