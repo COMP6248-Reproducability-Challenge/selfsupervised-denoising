@@ -21,7 +21,7 @@ def manipulate(image, subpatch_size: int = 5, inplace: bool = False):
     if not inplace:
         image = image.clone()
 
-    mask = []
+    masked_coords = []
     image_x = image.shape[2]
     image_y = image.shape[3]
     subpatch_radius = math.floor(subpatch_size / 2)
@@ -29,7 +29,7 @@ def manipulate(image, subpatch_size: int = 5, inplace: bool = False):
     coords = get_stratified_coords((image_x, image_y))
     for coord in zip(*coords):
         x, y = coord
-        mask.append((x,y))
+        masked_coords.append((x,y))
         min_x = min([x - subpatch_radius, 0])
         max_x = min([x + subpatch_radius, image_y])
         min_y = min([y - subpatch_radius, 0])
@@ -40,7 +40,7 @@ def manipulate(image, subpatch_size: int = 5, inplace: bool = False):
 
         # Now replace pixel at x,y with pixel from rand_x,rand_y
         image[:, :, x, y] = image[:, :, rand_x, rand_y]
-    return image, mask
+    return image, masked_coords
 
 def rand_num_exclude(_min: int, _max: int, exclude: list):
     """
