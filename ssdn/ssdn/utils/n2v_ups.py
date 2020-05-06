@@ -21,13 +21,15 @@ def manipulate(image, subpatch_size = 5, inplace: bool = False):
     if not inplace:
         image = image.clone()
 
+    mask = []
     image_x = image.shape[2]
     image_y = image.shape[3]
     subpatch_radius = math.floor(subpatch_size / 2)
 
-    coords = get_stratified_coords(tuple(image.shape))
+    coords = get_stratified_coords((image_x, image_y))
     for coord in zip(*coords):
         x, y = coord
+        mask.append((x,y))
         min_x = min([x - subpatch_radius, 0])
         max_x = min([x + subpatch_radius, image_y])
         min_y = min([y - subpatch_radius, 0])
@@ -38,9 +40,18 @@ def manipulate(image, subpatch_size = 5, inplace: bool = False):
 
         # Now replace pixel at x,y with pixel from rand_x,rand_y
         image[:, :, x, y] = image[:, :, rand_x, rand_y]
-    return image
+    return image, mask
 
-def rand_num_exclude(_min, _max, exclude: list):
+def rand_num_exclude(_min: int, _max: int, exclude: list):
+    """
+    Get a random integer in a range but excluding any in the list
+    or integers to be excluded.
+
+    Args:
+        _min (Number): minimum integer value.
+        _max (Number): maximum integer value.
+        exclude (list): list of integers to be excluded.
+    """
     rand = randint(_min, _max)
     return rand_num_exclude(_min, _max, exclude) if rand in exclude else rand
 
@@ -56,8 +67,6 @@ def pm_uniform_withCP(local_sub_patch_radius):
             vals.append(sub_patch[tuple(rand_coords)])
         return vals
     return random_neighbor_withCP_uniform
-
-
 
 
 def get_subpatch(patch, coord, local_sub_patch_radius):
