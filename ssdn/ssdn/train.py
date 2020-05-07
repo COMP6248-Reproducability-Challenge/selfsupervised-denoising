@@ -49,7 +49,7 @@ logger = logging.getLogger("ssdn.train")
 DEFAULT_CFG = ssdn.cfg.base()
 DEFAULT_CFG.update(
     {
-        ConfigValue.ALGORITHM: NoiseAlgorithm.SELFSUPERVISED_DENOISING,
+        ConfigValue.ALGORITHM: NoiseAlgorithm.NOISE_TO_VOID,
         ConfigValue.NOISE_STYLE: "gauss25",
         ConfigValue.NOISE_VALUE: NoiseValue.KNOWN,
         ConfigValue.TRAIN_DATA_PATH: "/data/dsj1n15/datasets/ilsvrc_val.h5",
@@ -530,7 +530,7 @@ class DenoiserTrainer:
 
         Returns:
             Dict: [description]
-        """        
+        """
         outputs = {PipelineOutput.IMG_DENOISED: "out"}
         if self.cfg[ConfigValue.PIPELINE] == Pipeline.SSDN:
             outputs.update({PipelineOutput.IMG_MU: "mu_out"})
@@ -867,12 +867,12 @@ if __name__ == "__main__":
     # torch.backends.cudnn.deterministic = True
     # torch.backends.cudnn.benchmark = False
 
-    if True:
-        trainer = resume_run(
-            r"/data/dsj1n15/local/COMP6202-DL-Reproducibility-Challenge/runs/00000-train-ssdn-gauss25-sigma_known-iter5k"
-        )
-        trainer.train()
-        exit()
+    # if True:
+    #     trainer = resume_run(
+    #         r"/data/dsj1n15/local/COMP6202-DL-Reproducibility-Challenge/runs/00000-train-ssdn-gauss25-sigma_known-iter5k"
+    #     )
+    #     trainer.train()
+    #     exit()
 
     trainer = DenoiserTrainer(DEFAULT_CFG)
     trainer.train()

@@ -20,7 +20,7 @@ def base():
         ConfigValue.EVAL_INTERVAL: 1000,
         ConfigValue.PRINT_INTERVAL: 1000,
         ConfigValue.SNAPSHOT_INTERVAL: 1000,
-        ConfigValue.DATALOADER_WORKERS: 4,
+        ConfigValue.DATALOADER_WORKERS: 1,
         ConfigValue.PIN_DATA_MEMORY: False,
         ConfigValue.DIAGONAL_COVARIANCE: False,
         ConfigValue.TRAIN_DATASET_TYPE: None,
@@ -120,7 +120,8 @@ def infer_pipeline(algorithm: NoiseAlgorithm) -> Pipeline:
         NoiseAlgorithm.NOISE_TO_CLEAN,
     ]:
         return Pipeline.MSE
-    elif algorithm in [NoiseAlgorithm.NOISE_TO_VOID]
+    elif algorithm in [NoiseAlgorithm.NOISE_TO_VOID]:
+        return Pipeline.MASK_MSE
     else:
         raise NotImplementedError("Algorithm does not have a default pipeline.")
 

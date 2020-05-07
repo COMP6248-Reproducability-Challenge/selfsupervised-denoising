@@ -27,7 +27,7 @@ def manipulate(
         image = image.clone()
 
     image_x = image.shape[2]
-    image_y = image.shape[3]
+    image_y = image.shape[1]
     subpatch_radius = math.floor(subpatch_size / 2)
     coords = get_stratified_coords((image_x, image_y))
 
@@ -45,7 +45,7 @@ def manipulate(
         rand_y = rand_num_exclude(min_y, max_y, [y])
 
         # Now replace pixel at x,y with pixel from rand_x,rand_y
-        image[:, :, x, y] = image[:, :, rand_x, rand_y]
+        image[:, y, x] = image[:, rand_y, rand_x]
     return image, mask_coords
 
 def rand_num_exclude(_min: int, _max: int, exclude: list):
