@@ -168,6 +168,7 @@ class Denoiser(nn.Module):
             ref = data[NoisyDataset.REFERENCE].to(self.device)
             ref.requires_grad = True
             # TODO: change to use MSE loss only on masked pixels
+            data[NoiseDataset.METADATA]['mask_coords']
             loss = nn.MSELoss(reduction="none")(cleaned, ref)
             loss = loss.view(loss.shape[0], -1).mean(1, keepdim=True)
             outputs[PipelineOutput.LOSS] = loss

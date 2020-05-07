@@ -11,6 +11,7 @@ def loss_mask_mse(
     mse = 0
     for coord in masked_coords:
         x, y = coord
+        # TODO: may not want to get mean here as do it in pipeline?
         mse += ((target[:, :, x, y] - input[:, :, x, y]) ** 2).mean().item()
     if reduction == 'mean':
         return mse / len(masked_coords)

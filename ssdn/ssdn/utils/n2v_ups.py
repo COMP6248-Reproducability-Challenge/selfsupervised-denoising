@@ -9,7 +9,6 @@ def manipulate(
     inplace: bool = False
 ):
     """
-    TODO: might need to do this with the same mask for each image?
     Take sub-patches from within an image at random coordinates
     to replace a given percentage of central pixels with a random
     pixel within the sub-patch (aka Uniform Pixel Selection).
@@ -32,12 +31,10 @@ def manipulate(
     subpatch_radius = math.floor(subpatch_size / 2)
     coords = get_stratified_coords((image_x, image_y))
 
-    masked_coords = []
-    mask_tensor = torch.zeros(image_x, image_y, dtype=int)
+    mask_coords = []
     for coord in zip(*coords):
         x, y = coord
-        masked_coords.append((x,y))
-        mask_tensor[x, y] = 1
+        mask_coords.append((x,y))
 
         min_x = min([x - subpatch_radius, 0])
         max_x = min([x + subpatch_radius, image_x - 1])
@@ -49,7 +46,7 @@ def manipulate(
 
         # Now replace pixel at x,y with pixel from rand_x,rand_y
         image[:, :, x, y] = image[:, :, rand_x, rand_y]
-    return image, masked_coords, mask_tensor
+    return image, mask_coords
 
 def rand_num_exclude(_min: int, _max: int, exclude: list):
     """
