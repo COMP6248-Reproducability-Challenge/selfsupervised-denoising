@@ -1,6 +1,7 @@
+import torch
 import numpy as np
 import math
-from random import randint
+
 from torch import Tensor
 
 def manipulate(
@@ -43,7 +44,6 @@ def manipulate(
 
         rand_x = rand_num_exclude(min_x, max_x, [x])
         rand_y = rand_num_exclude(min_y, max_y, [y])
-
         # Now replace pixel at x,y with pixel from rand_x,rand_y
         image[:, y, x] = image[:, rand_y, rand_x]
     return image, mask_coords
@@ -58,7 +58,7 @@ def rand_num_exclude(_min: int, _max: int, exclude: list):
         _max (Number): maximum integer value.
         exclude (list): list of integers to be excluded.
     """
-    rand = randint(_min, _max)
+    rand = torch.randint(_min, _max, (1,))[0]
     return rand_num_exclude(_min, _max, exclude) if rand in exclude else rand
 
 
@@ -89,4 +89,5 @@ def get_stratified_coords(shape):
 def get_random_coords(box_size):
     while True:
         # yield used so can call next() on this to get next random coords :D ez
-        yield (np.random.rand() * box_size, np.random.rand() * box_size)
+        # TODO: Change to torch random
+        yield (torch.rand(1) * box_size, torch.rand(1) * box_size)
