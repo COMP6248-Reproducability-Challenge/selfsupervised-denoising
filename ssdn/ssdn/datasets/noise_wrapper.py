@@ -58,6 +58,7 @@ class NoisyDataset(Dataset):
         pad_multiple: int = None,
         square: bool = False,
         data_format: str = DataFormat.CHW,
+        training_mode: bool = False
     ):
         self.child = child
         self.enable_metadata = enable_metadata
@@ -67,6 +68,7 @@ class NoisyDataset(Dataset):
         self.pad_multiple = pad_multiple
         self.square = square
         self.data_format = data_format
+        self.training_mode = training_mode
 
         # Initialise max image size property, this will load all data
         self._max_image_size = None
@@ -118,7 +120,7 @@ class NoisyDataset(Dataset):
 
         # Create the noisy input images
         noisy_in, noisy_in_coeff = ssdn.utils.noise.add_style(clean, self.noise_style)
-        if self.algorithm == NoiseAlgorithm.NOISE_TO_VOID:
+        if self.algorithm == NoiseAlgorithm.NOISE_TO_VOID and self.training_mode:
             noisy_in, mask_coords = ssdn.utils.n2v_ups.manipulate(noisy_in, 5) # TODO use config for neighbourhood radius
             metadata['mask_coords'] = mask_coords
         inp, inp_coeff = noisy_in, noisy_in_coeff

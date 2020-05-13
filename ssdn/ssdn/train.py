@@ -748,6 +748,7 @@ class DenoiserTrainer:
             pad_uniform=False,
             pad_multiple=NoiseNetwork.input_wh_mul(),
             square=cfg[ConfigValue.BLINDSPOT],
+            training_mode=True
         )
         # Ensure dataset initialised by loading first bit of data
         _ = dataset[0]
@@ -800,6 +801,7 @@ class DenoiserTrainer:
             pad_uniform=True,
             pad_multiple=NoiseNetwork.input_wh_mul(),
             square=cfg[ConfigValue.BLINDSPOT],
+            training_mode=False
         )
         # Ensure dataset initialised by loading first bit of data
         _ = dataset[0]

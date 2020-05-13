@@ -46,7 +46,7 @@ def manipulate(
         rand_y = rand_num_exclude(min_y, max_y, [y])
         # Now replace pixel at x,y with pixel from rand_x,rand_y
         image[:, y, x] = image[:, rand_y, rand_x]
-    return image, mask_coords
+    return image, torch.tensor(mask_coords)
 
 def rand_num_exclude(_min: int, _max: int, exclude: list):
     """
