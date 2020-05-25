@@ -132,6 +132,8 @@ class Denoiser(nn.Module):
             return self._ssdn_pipeline(data, **kwargs)
         elif self.cfg[ConfigValue.PIPELINE] == Pipeline.MASK_MSE:
             return self._mask_mse_pipeline(data, **kwargs)
+            # return self._mse_pipeline(data, **kwargs)
+
         else:
             raise NotImplementedError("Unsupported processing pipeline")
 
@@ -171,7 +173,6 @@ class Denoiser(nn.Module):
 
             if NoisyDataset.Metadata.MASK_COORDS in data[NoisyDataset.METADATA]:
                 mask_coords = data[NoisyDataset.METADATA][NoisyDataset.Metadata.MASK_COORDS]
-                #loss = nn.MSELoss(reduction="none")(cleaned, ref)
                 loss = ssdn.utils.n2v_loss.loss_mask_mse(mask_coords, cleaned, ref)
                 loss = loss.view(loss.shape[0], -1).mean(1, keepdim=True)
                 outputs[PipelineOutput.LOSS] = loss

@@ -7,13 +7,14 @@ def loss_mask_mse(
     masked_coords: Tensor,
     input: Tensor,
     target: Tensor,
-    reduction: bool = 'mean'
+    reduction: bool = 'none'
 ):
     mse = 0
     coords = masked_coords.tolist()[0]
     for coord in coords:
         x, y = coord
-        mse += ((target[:, :, x, y] - input[:, :, x, y]) ** 2).mean().item()
+        diff = target[:, :, x, y] - input[:, :, x, y]
+        mse += (diff ** 2)
     if reduction == 'mean':
         return mse / len(masked_coords)
     elif reduction == 'none':
