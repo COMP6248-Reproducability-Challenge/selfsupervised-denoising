@@ -248,7 +248,7 @@ class DenoiserTrainer:
                 image_count = data[NoisyDataset.INPUT].shape[0]
                 outputs = self.denoiser.run_pipeline(data)
                 eval_history["n"] += image_count
-                eval_history["loss"] += outputs[PipelineOutput.LOSS]
+                #eval_history["loss"] += outputs[PipelineOutput.LOSS]
                 # Calculate true PSNR losses for outputs using clean references
                 for key, name in self.img_outputs(prefix="psnr").items():
                     eval_history[name] += self.calculate_psnr(outputs, key, unpad=True)

@@ -122,7 +122,7 @@ class NoisyDataset(Dataset):
         noisy_in, noisy_in_coeff = ssdn.utils.noise.add_style(clean, self.noise_style)
         if self.algorithm == NoiseAlgorithm.NOISE_TO_VOID and self.training_mode:
             noisy_in, mask_coords = ssdn.utils.n2v_ups.manipulate(noisy_in, 5) # TODO use config for neighbourhood radius
-            metadata['mask_coords'] = mask_coords
+            metadata[NoisyDataset.Metadata.MASK_COORDS] = mask_coords
         inp, inp_coeff = noisy_in, noisy_in_coeff
 
         # N2C requires noisy input and clean reference images
@@ -277,3 +277,4 @@ class NoisyDataset(Dataset):
         INDEXES = auto()
         INPUT_NOISE_VALUES = auto()
         REFERENCE_NOISE_VALUES = auto()
+        MASK_COORDS = auto()
