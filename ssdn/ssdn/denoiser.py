@@ -169,7 +169,6 @@ class Denoiser(nn.Module):
         if len(data) >= NoisyDataset.REFERENCE:
             ref = data[NoisyDataset.REFERENCE].to(self.device)
             ref.requires_grad = True
-            # TODO: change to use MSE loss only on masked pixels
 
             if NoisyDataset.Metadata.MASK_COORDS in data[NoisyDataset.METADATA]:
                 mask_coords = data[NoisyDataset.METADATA][NoisyDataset.Metadata.MASK_COORDS]
