@@ -14,5 +14,6 @@ setup(
         "overrides",
         "colorlog",
         "colored_traceback",
+        "tqdm"
     ],
 )

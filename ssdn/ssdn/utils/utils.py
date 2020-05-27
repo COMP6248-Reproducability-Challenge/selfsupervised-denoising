@@ -4,7 +4,7 @@
 __authors__ = "David Jones <dsj1n15@ecs.soton.ac.uk>"
 
 import numpy as np
-import torch._namedtensor_internals
+import torch
 import re
 import os
 import time
