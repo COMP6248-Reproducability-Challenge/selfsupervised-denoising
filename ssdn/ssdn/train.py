@@ -50,7 +50,7 @@ DEFAULT_CFG = ssdn.cfg.base()
 DEFAULT_CFG.update(
     {
         ConfigValue.ALGORITHM: NoiseAlgorithm.NOISE_TO_VOID,
-        ConfigValue.NOISE_STYLE: "gauss25",
+        ConfigValue.NOISE_STYLE: "gauss25_nc",
         ConfigValue.NOISE_VALUE: NoiseValue.KNOWN,
         ConfigValue.TRAIN_DATA_PATH: "/data/dsj1n15/datasets/ilsvrc_val.h5",
         ConfigValue.TEST_DATA_PATH: "/data/dsj1n15/datasets/BSDS300/images/test",
@@ -601,7 +601,6 @@ class DenoiserTrainer:
             next_run_id = self.next_run_id()
             run_dir_name = "{:05d}-{}".format(next_run_id, config_name)
             self._run_dir = run_dir_name
-
         return self._run_dir
 
     def next_run_id(self) -> int:

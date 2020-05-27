@@ -66,6 +66,8 @@ def get_stratified_coords(shape):
     """
     Args:
         shape (Tuple[Number,Number]): the shape of the input patch
+
+        Credit: https://github.com/juglab/n2v
     """
     perc_pix = 1.5 # TODO put in config
     box_size = np.round(np.sqrt(100/perc_pix)).astype(np.int)
@@ -87,7 +89,9 @@ def get_stratified_coords(shape):
 
 
 def get_random_coords(box_size):
+    """
+        Credit: https://github.com/juglab/n2v
+    """
     while True:
         # yield used so can call next() on this to get next random coords :D ez
-        # TODO: Change to torch random
         yield (torch.rand(1) * box_size, torch.rand(1) * box_size)
