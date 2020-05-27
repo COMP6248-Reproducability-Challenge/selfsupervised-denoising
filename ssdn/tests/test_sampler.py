@@ -197,7 +197,9 @@ def _test_state_saving():
 
     zipped = zip(index_batches_ref, index_batches)
     if not all(map(lambda x: all(x[0] == x[1]), zipped)):
-        raise AssertionError("Got: {}, Expected: {}".format(index_batches, index_batches_ref))
+        raise AssertionError(
+            "Got: {}, Expected: {}".format(index_batches, index_batches_ref)
+        )
 
 
 def test_state_saving():

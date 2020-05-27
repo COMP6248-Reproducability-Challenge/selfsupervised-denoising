@@ -4,15 +4,15 @@
 __authors__ = "David Jones <dsj1n15@ecs.soton.ac.uk>"
 
 import numpy as np
-import torch
-import torch.nn.functional as F
+import torch._namedtensor_internals
 import re
 import os
 import time
 
-from typing import Any, List, Dict
+from typing import Any, List
 from torch import Tensor
 from contextlib import contextmanager
+from collections import OrderedDict
 
 
 def compute_ramped_lrate(
@@ -158,6 +158,12 @@ class Metric:
 
     def empty(self) -> bool:
         return self.n == 0
+
+
+class MetricDict(OrderedDict):
+    def __missing__(self, key):
+        self[key] = value = Metric()
+        return value
 
 
 def separator(cols=100) -> str:
