@@ -17,15 +17,17 @@ def base():
         ConfigValue.LEARNING_RATE: 3e-4,
         ConfigValue.LR_RAMPDOWN_FRACTION: 0.1,
         ConfigValue.LR_RAMPUP_FRACTION: 0.3,
-        ConfigValue.EVAL_INTERVAL: 1000,
+        ConfigValue.EVAL_INTERVAL: 10000,
         ConfigValue.PRINT_INTERVAL: 1000,
-        ConfigValue.SNAPSHOT_INTERVAL: 1000,
+        ConfigValue.SNAPSHOT_INTERVAL: 10000,
         ConfigValue.DATALOADER_WORKERS: 4,
         ConfigValue.PIN_DATA_MEMORY: False,
         ConfigValue.DIAGONAL_COVARIANCE: False,
+        ConfigValue.TRAIN_DATA_PATH: None,
         ConfigValue.TRAIN_DATASET_TYPE: None,
-        ConfigValue.TEST_DATASET_TYPE: None,
         ConfigValue.TRAIN_DATASET_NAME: None,
+        ConfigValue.TEST_DATA_PATH: None,
+        ConfigValue.TEST_DATASET_TYPE: None,
         ConfigValue.TEST_DATASET_NAME: None,
     }
 
@@ -70,7 +72,7 @@ def infer_datasets(cfg: Dict):
         return dtype
 
     # Infer for training set
-    if cfg[ConfigValue.TRAIN_DATA_PATH]:
+    if cfg.get(ConfigValue.TRAIN_DATA_PATH, None) is not None:
         if cfg.get(ConfigValue.TRAIN_DATASET_NAME, None) is None:
             cfg[ConfigValue.TRAIN_DATASET_NAME] = infer_dname(
                 cfg[ConfigValue.TRAIN_DATA_PATH]
@@ -80,7 +82,7 @@ def infer_datasets(cfg: Dict):
                 cfg[ConfigValue.TRAIN_DATA_PATH]
             )
     # Infer for testing/validation set
-    if cfg[ConfigValue.TEST_DATA_PATH]:
+    if cfg.get(ConfigValue.TEST_DATA_PATH, None) is not None:
         if cfg.get(ConfigValue.TEST_DATASET_NAME, None) is None:
             cfg[ConfigValue.TEST_DATASET_NAME] = infer_dname(
                 cfg[ConfigValue.TEST_DATA_PATH]

@@ -10,10 +10,9 @@ import logging
 
 import ssdn
 
-
 from torch import Tensor
 from torch.optim import Optimizer
-from torch.utils.data import Dataset, DataLoader, Sampler
+from torch.utils.data import DataLoader, Sampler
 from torchvision.transforms import RandomCrop
 from ssdn.datasets import (
     HDF5Dataset,
@@ -26,7 +25,6 @@ from ssdn.datasets import (
 from ssdn.params import (
     ConfigValue,
     StateValue,
-    NoiseAlgorithm,
     PipelineOutput,
     Pipeline,
     DatasetType,
@@ -36,36 +34,37 @@ from ssdn.params import (
 
 from ssdn.models import NoiseNetwork
 from ssdn.denoiser import Denoiser
-from ssdn.utils import TrackedTime, Metric, separator
+from ssdn.utils import TrackedTime, Metric, MetricDict, separator
 from ssdn.utils.data_format import DataFormat
 from ssdn.cfg import DEFAULT_RUN_DIR
 from typing import Dict, Tuple, Union, Callable
 from torch.utils.tensorboard import SummaryWriter
-from collections import OrderedDict, defaultdict
+from collections import defaultdict
+
 
 logger = logging.getLogger("ssdn.train")
 
 
-DEFAULT_CFG = ssdn.cfg.base()
-DEFAULT_CFG.update(
-    {
-        ConfigValue.ALGORITHM: NoiseAlgorithm.SELFSUPERVISED_DENOISING,
-        ConfigValue.NOISE_STYLE: "gauss25",
-        ConfigValue.NOISE_VALUE: NoiseValue.KNOWN,
-        ConfigValue.TRAIN_DATA_PATH: "/data/dsj1n15/datasets/ilsvrc_val.h5",
-        ConfigValue.TEST_DATA_PATH: "/data/dsj1n15/datasets/BSDS300/images/test",
-    }
-)
-
-
-class OrderedDefaultDict(OrderedDict):
-    # TODO: Make generic and move
-    def __missing__(self, key):
-        self[key] = value = Metric()
-        return value
-
-
 class DenoiserTrainer:
+    """Class that handles training of a Denoiser model using an iteration based
+    approach (one image == one iteration). Relies on Dataloaders for data
+    preparation for the relevant Denoiser pipleine. Start via `train()` method
+    after configuration initialised.
+
+    Call the external  `resume_run()` if resuming an existing training;
+    This will create a new DenoiserTrainer().
+
+    Args:
+        cfg (Dict): Dictionary with configuration to train on. This dictionary
+            will not be assessed for validity until execution.
+        state (Dict, optional): Dictionary with training state. Defaults to an
+            empty dictionary.
+    runs_dir (str, optional): Root directory to create run directory.
+        Defaults to DEFAULT_RUN_DIR.
+    run_dir (str, optional): Explicit run directory name, will automatically
+        generate using configuration if not provided. Defaults to None.
+    """
+
     def __init__(
         self,
         cfg: Dict,
@@ -84,6 +83,9 @@ class DenoiserTrainer:
 
         self._denoiser: Denoiser = None
         self._train_iter = None
+
+        self.trainloader, self.trainset, self.train_sampler = None, None, None
+        self.testloader, self.testset, self.test_sampler = None, None, None
 
     @property
     def denoiser(self) -> Denoiser:
@@ -118,8 +120,8 @@ class DenoiserTrainer:
         # History stores events that may happen each iteration
         self.state[StateValue.HISTORY] = {}
         history_state = self.state[StateValue.HISTORY]
-        history_state[HistoryValue.TRAIN] = OrderedDefaultDict()
-        history_state[HistoryValue.EVAL] = OrderedDefaultDict()
+        history_state[HistoryValue.TRAIN] = MetricDict()
+        history_state[HistoryValue.EVAL] = MetricDict()
         history_state[HistoryValue.TIMINGS] = defaultdict(TrackedTime)
         self.reset_metrics()
 
@@ -130,18 +132,19 @@ class DenoiserTrainer:
         # Ensure writer is initialised
         _ = self.writer
         ssdn.logging_helper.setup(self.run_dir_path, "log.txt")
-        logger.info(separator())
+        logger.info(ssdn.utils.separator())
 
         logger.info("Loading Training Dataset...")
         self.trainloader, self.trainset, self.train_sampler = self.train_data()
         logger.info("Loaded Training Dataset.")
-        logger.info("Loading Test Dataset...")
-        self.testloader, self.testset, self.test_sampler = self.test_data()
-        logger.info("Loaded Test Dataset.")
+        if self.cfg[ConfigValue.TEST_DATA_PATH]:
+            logger.info("Loading Validation Dataset...")
+            self.testloader, self.testset, self.test_sampler = self.test_dataself.test_data()
+            logger.info("Loaded Validation Dataset.")
 
-        logger.info(separator())
+        logger.info(ssdn.utils.separator())
         logger.info("TRAINING STARTED")
-        logger.info(separator())
+        logger.info(ssdn.utils.separator())
 
         # Use history for metric tracking
         history = self.state[StateValue.HISTORY]
@@ -248,7 +251,6 @@ class DenoiserTrainer:
                 image_count = data[NoisyDataset.INPUT].shape[0]
                 outputs = self.denoiser.run_pipeline(data)
                 eval_history["n"] += image_count
-                eval_history["loss"] += outputs[PipelineOutput.LOSS]
                 # Calculate true PSNR losses for outputs using clean references
                 for key, name in self.img_outputs(prefix="psnr").items():
                     eval_history[name] += self.calculate_psnr(outputs, key, unpad=True)
@@ -270,7 +272,7 @@ class DenoiserTrainer:
         return self._optimizer
 
     @property
-    def learning_rate(self):
+    def learning_rate(self) -> float:
         return ssdn.utils.compute_ramped_lrate(
             self.state[StateValue.ITERATION],
             self.cfg[ConfigValue.TRAIN_ITERATIONS],
@@ -282,13 +284,13 @@ class DenoiserTrainer:
     def validation_output_callback(
         self, output_index: int
     ) -> Callable[int, Dict, None]:
-        """[summary]
+        """Callback that saves only one specific dataset image during each evaluation.
 
         Args:
-            output_index (int): [description]
+            output_index (int): Image index to save.
 
         Returns:
-            Callable[int, Dict, None]: Callback function for `evaluation()`.
+            Callable[[int, Dict], None]: Callback function for evaluator.
         """
 
         def callback(output_0_index: int, outputs: Dict):
@@ -436,26 +438,34 @@ class DenoiserTrainer:
         write_metric_dict(metric_dict, eval_prefix)
 
     def state_str(self, eval_prefix: str = "EVAL") -> str:
-        """[summary]
+        """String indicating current training state, displaying all metrics. This displays
+        training information and evaluation information if present.
 
         Args:
             eval_prefix (str, optional): String to put before evaluation lines.
-                Defaults to "EVAL".
+                Defaults to "EVAL" with alignment padding.
 
         Returns:
             str: String containing all available metrics.
         """
         state_str = self.train_state_str()
         if self.state[StateValue.HISTORY][HistoryValue.EVAL]["n"] > 0:
+            prefix = "{:10} {:>5}".format("", eval_prefix)
             state_str = os.linesep.join(
-                [state_str, self.eval_state_str(prefix=eval_prefix)]
+                [state_str, self.eval_state_str(prefix=prefix)]
             )
         return state_str
 
     def train_state_str(self) -> str:
+        """String describing current training state. Gives averages of all accumulated
+        metrics and remaining time estimates using tracked times.
+
+        Returns:
+            str: Generated description.
+        """
         def eta_str():
             timings = self.state[StateValue.HISTORY][HistoryValue.TIMINGS]
-            if "eta" in timings:
+            if isinstance(timings.get("eta", None), int):
                 eta = timings["eta"]
                 if eta < 1:
                     return "<1s"
@@ -483,16 +493,16 @@ class DenoiserTrainer:
         return summary
 
     def eval_state_str(self, prefix: str = "EVAL") -> str:
-        """[summary]
+        """String giving averages of all accumulated evaluation metrics metrics.
 
         Args:
             eval_prefix (str, optional): String to put at start of state string.
                 Defaults to "EVAL".
 
         Returns:
-            str: [description]
+            str: Generated string.
         """
-        summary = "{:10} {:>5} | ".format("", prefix)
+        summary = "{} | ".format(prefix)
         metric_str_list = []
         eval_metrics = self.state[StateValue.HISTORY][HistoryValue.EVAL]
         for key, metric in eval_metrics.items():
@@ -523,14 +533,15 @@ class DenoiserTrainer:
             reset_metric_dict(self.state[StateValue.HISTORY][HistoryValue.EVAL])
 
     def img_outputs(self, prefix: str = None) -> Dict:
-        """[summary]
+        """For the current configuration, determine the image outputs that will
+        be generated and associate them with a descriptive name for saving/processing.
 
         Args:
-            prefix (str, optional): [description]. Defaults to None.
+            prefix (str, optional): Prefix to prepend to names. Defaults to None.
 
         Returns:
-            Dict: [description]
-        """        
+            Dict: Dictionary of pipeline output keys to names.
+        """
         outputs = {PipelineOutput.IMG_DENOISED: "out"}
         if self.cfg[ConfigValue.PIPELINE] == Pipeline.SSDN:
             outputs.update({PipelineOutput.IMG_MU: "mu_out"})
@@ -543,6 +554,17 @@ class DenoiserTrainer:
     def calculate_psnr(
         outputs: Dict, output: PipelineOutput, unpad: bool = True
     ) -> Tensor:
+        """Calculate all PSNRs for a given pipleine output, handling batching
+        and unpadding.
+
+        Args:
+            outputs (Dict): Output dictionary from a pipeline execution.
+            output (PipelineOutput): Key to image to process.
+            unpad (bool, optional): Whether to unpad. Defaults to True.
+
+        Returns:
+            Tensor: PSNR results (one per batch image).
+        """
         # Get clean reference
         metadata = outputs[PipelineOutput.INPUTS][NoisyDataset.METADATA]
         clean = metadata[NoisyDataset.Metadata.CLEAN]
@@ -597,9 +619,9 @@ class DenoiserTrainer:
             str: Run directory name, note this is not a full path.
         """
         if self._run_dir is None:
-            config_name = self.train_config_name()
+            config_name = self.config_name()
             next_run_id = self.next_run_id()
-            run_dir_name = "{:05d}-{}".format(next_run_id, config_name)
+            run_dir_name = "{:05d}-train-{}".format(next_run_id, config_name)
             self._run_dir = run_dir_name
 
         return self._run_dir
@@ -658,9 +680,19 @@ class DenoiserTrainer:
             timings["eta"] = sf * new_eta + (1 - sf) * timings["eta"]
         return timings["eta"]
 
-    def train_config_name(self) -> str:
+    def config_name(self) -> str:
+        """Create a configuration name that identifies the current configuration.
+
+        Returns:
+            str: Denoiser config string with training iterations and the datasets
+                used appended (trainset-evalset-denoiser_cfg-iterations).
+        """
         def iter_str() -> str:
-            iterations = self.cfg[ConfigValue.TRAIN_ITERATIONS]
+            if self.state[StateValue.ITERATION] > 0:
+                # Handle eval only case
+                iterations = self.state[StateValue.ITERATION]
+            else:
+                iterations = self.cfg[ConfigValue.TRAIN_ITERATIONS]
             if iterations >= 1000000:
                 return "iter%dm" % (iterations // 1000000)
             elif iterations >= 1000:
@@ -668,7 +700,12 @@ class DenoiserTrainer:
             else:
                 return "iter%d" % iterations
 
-        config_name_lst = ["train", ssdn.cfg.config_name(self.cfg), iter_str()]
+        config_name_lst = [ssdn.cfg.config_name(self.cfg), iter_str()]
+        if self.cfg.get(ConfigValue.TEST_DATASET_NAME, None) is not None:
+            config_name_lst = [self.cfg[ConfigValue.TEST_DATASET_NAME]] + config_name_lst
+        if self.cfg.get(ConfigValue.TRAIN_DATASET_NAME, None) is not None:
+            config_name_lst = [self.cfg[ConfigValue.TRAIN_DATASET_NAME]] + config_name_lst
+
         config_name = "-".join(config_name_lst)
         return config_name
 
@@ -700,7 +737,7 @@ class DenoiserTrainer:
                 from disk.
         """
         if isinstance(state_dict, str):
-            state_dict = torch.load(state_dict)
+            state_dict = torch.load(state_dict, map_location="cpu")
         self.denoiser = Denoiser.from_state_dict(state_dict["denoiser"])
         self.cfg = self.denoiser.cfg
         self.state = state_dict["state"]
@@ -727,7 +764,6 @@ class DenoiserTrainer:
             dataset = UnlabelledImageFolderDataset(
                 cfg[ConfigValue.TRAIN_DATA_PATH],
                 channels=cfg[ConfigValue.IMAGE_CHANNELS],
-                # minimum_size=(ConfigValue.TRAIN_PATCH_SIZE, ConfigValue.TRAIN_PATCH_SIZE),
                 transform=transform,
                 recursive=True,
             )
@@ -768,6 +804,12 @@ class DenoiserTrainer:
             pin_memory=cfg[ConfigValue.PIN_DATA_MEMORY],
         )
         return dataloader, dataset, sampler
+
+    def set_train_data(self, path: str):
+        self.cfg[ConfigValue.TRAIN_DATA_PATH] = path
+        self.cfg[ConfigValue.TRAIN_DATASET_TYPE] = None
+        self.cfg[ConfigValue.TRAIN_DATASET_NAME] = None
+        ssdn.cfg.infer_datasets(self.cfg)
 
     def test_data(self) -> Tuple[DataLoader, NoisyDataset, Sampler]:
         """Configure the test set using the current configuration.
@@ -818,6 +860,12 @@ class DenoiserTrainer:
         )
         return dataloader, dataset, sampler
 
+    def set_test_data(self, path: str):
+        self.cfg[ConfigValue.TEST_DATA_PATH] = path
+        self.cfg[ConfigValue.TEST_DATASET_TYPE] = None
+        self.cfg[ConfigValue.TEST_DATASET_NAME] = None
+        ssdn.cfg.infer_datasets(self.cfg)
+
 
 def resume_run(run_dir: str, iteration: int = None) -> DenoiserTrainer:
     """Resume training of a Denoiser model from a previous run.
@@ -856,24 +904,5 @@ def resume_run(run_dir: str, iteration: int = None) -> DenoiserTrainer:
     for timing in trainer.state[StateValue.HISTORY][HistoryValue.TIMINGS].values():
         if isinstance(timing, TrackedTime):
             timing.forget()
+
     return trainer
-
-
-if __name__ == "__main__":
-    # torch.set_default_dtype(torch.float64)
-
-    ssdn.logging_helper.setup()
-    # torch.manual_seed(0)
-    # torch.backends.cudnn.deterministic = True
-    # torch.backends.cudnn.benchmark = False
-
-    if True:
-        trainer = resume_run(
-            r"/data/dsj1n15/local/COMP6202-DL-Reproducibility-Challenge/runs/00000-train-ssdn-gauss25-sigma_known-iter5k"
-        )
-        trainer.train()
-        exit()
-
-    trainer = DenoiserTrainer(DEFAULT_CFG)
-    trainer.train()
-    # Initialise RNG

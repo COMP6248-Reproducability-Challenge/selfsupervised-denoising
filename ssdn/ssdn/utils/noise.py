@@ -52,7 +52,8 @@ def add_gaussian(
             if isinstance(max_std_dev, int):
                 max_std_dev /= 255
             uniform_generator = Uniform(min_std_dev, max_std_dev)
-            std_dev = uniform_generator.sample((tensor.shape[0], 1, 1, 1))
+            shape = [tensor.shape[0]] + [1] * (len(tensor.shape) - 1)
+            std_dev = uniform_generator.sample(shape)
     if isinstance(std_dev, int):
         std_dev = std_dev / 255
     tensor = tensor.add_(torch.randn(tensor.size()) * std_dev + mean)
@@ -95,7 +96,8 @@ def add_poisson(
             assert len(lam) == 2
             (min_lam, max_lam) = lam
             uniform_generator = Uniform(min_lam, max_lam)
-            lam = uniform_generator.sample((tensor.shape[0], 1, 1, 1))
+            shape = [tensor.shape[0]] + [1] * (len(tensor.shape) - 1)
+            lam = uniform_generator.sample(shape)
     tensor.mul_(lam)
     poisson_generator = Poisson(torch.tensor(1, dtype=float))
     noise = poisson_generator.sample(tensor.shape)
