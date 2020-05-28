@@ -7,6 +7,7 @@ from typing import Dict
 from ssdn.cli.cmds import Command
 from ssdn.eval import DenoiserEvaluator
 from ssdn.cfg import DEFAULT_RUN_DIR
+from ssdn.params import ConfigValue
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +33,17 @@ class EvaluateCommand(Command):
             default=DEFAULT_RUN_DIR,
             help="Directory in which the output directory is generated."
         )
+        cmd_parser.add_argument(
+            "--batch_size",
+            type=int,
+            help="Batch size to use, will default to that used while training.",
+        )
 
     @overrides
     def execute(self, args: Dict):
         evaluator = DenoiserEvaluator(args["model"], runs_dir=args["runs_dir"])
+        if args.get("batch_size", None) is not None:
+            evaluator.cfg[ConfigValue.TEST_MINIBATCH_SIZE] = args["batch_size"]
         evaluator.set_test_data(args["dataset"])
         evaluator.evaluate()
 
