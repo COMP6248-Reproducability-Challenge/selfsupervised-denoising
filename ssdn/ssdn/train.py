@@ -597,7 +597,7 @@ class DenoiserTrainer:
         if self._writer is None:
             start_iteration = self.state[StateValue.ITERATION]
             self._writer = SummaryWriter(
-                log_dir=self.run_dir_path, purge_step=start_iteration
+                log_dir=self.run_dir_path, purge_step=start_iteration+1
             )
         return self._writer
 

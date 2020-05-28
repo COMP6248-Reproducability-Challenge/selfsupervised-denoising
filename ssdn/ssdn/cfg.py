@@ -9,8 +9,8 @@ DEFAULT_RUN_DIR = "runs"
 
 def base():
     return {
-        ConfigValue.TRAIN_ITERATIONS: 5000,
-        ConfigValue.TRAIN_MINIBATCH_SIZE: 1,
+        ConfigValue.TRAIN_ITERATIONS: 2000000,
+        ConfigValue.TRAIN_MINIBATCH_SIZE: 4,
         ConfigValue.TEST_MINIBATCH_SIZE: 2,
         ConfigValue.IMAGE_CHANNELS: 3,
         ConfigValue.TRAIN_PATCH_SIZE: 256,

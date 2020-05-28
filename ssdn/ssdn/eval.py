@@ -100,6 +100,7 @@ class DenoiserEvaluator(DenoiserTrainer):
         def callback(output_0_index: int, outputs: Dict):
             remaining = (len(dataset) - 1) - output_0_index
             inp = outputs[PipelineOutput.INPUTS][NoisyDataset.INPUT]
+            metadata = outputs[PipelineOutput.INPUTS][NoisyDataset.METADATA]
             batch_size = inp.shape[0]
             if remaining > 0:
                 bis = range(min(remaining, batch_size))
@@ -111,10 +112,11 @@ class DenoiserEvaluator(DenoiserTrainer):
                 )
                 with open(os.path.join(self.run_dir_path, "psnrs.csv"), "a") as f:
                     if output_0_index == 0:
-                        fields = ["id"] + list(self.img_outputs(prefix="psnr").values())
+                        fields = ["id", "psnr_nsy"] + list(self.img_outputs(prefix="psnr").values())
                         f.write(",".join(fields) + "\n")
-                    # FIXME: Doing a second PSNR calculation
+                    # FIXME: Doing PSNR calculations again
                     values = []
+                    values += [ssdn.utils.calculate_psnr(inp, metadata[NoisyDataset.Metadata.CLEAN])]
                     for key in self.img_outputs(prefix="psnr"):
                         values += [self.calculate_psnr(outputs, key, unpad=True)]
                     for i in range(batch_size):

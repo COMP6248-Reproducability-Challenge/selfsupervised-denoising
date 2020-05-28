@@ -71,7 +71,6 @@ def setup(log_dir: str = None, filename: str = None):
         file.setFormatter(formatter)
         root_logger.addHandler(file)
 
-    print(package_logger)
     # Configure console logging
     # Must keep track of handle in global state so it can be removed before
     # uncaught exceptions are logged
