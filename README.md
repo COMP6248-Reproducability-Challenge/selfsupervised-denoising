@@ -2,11 +2,14 @@
 Reimplementers:
 **David Jones**, **Richard Crosland**, **Jason Barrett** | University of Southampton [ECS]
 
+Codebase for the reimplmentation of the focus [paper](https://arxiv.org/abs/1901.10277) as well as discussed baselines: Noise2Clean, [Noise2Noise](https://arxiv.org/abs/1803.04189), and [Noise2Void](https://arxiv.org/abs/1811.10980).
+
 ![Denoising comparison](figures/example.png "Denoising Comparison")
 
 ## Resources
 
 - [Original Paper](https://arxiv.org/abs/1901.10277) (arXiv)
+- [Official Tensorflow Source](https://github.com/NVlabs/selfsupervised-denoising) (GitHub)
 
 ## Python requirements
 This code was tested on:
@@ -17,7 +20,7 @@ This code was tested on:
 ## Installation
 1. Create an Anaconda/venv environment (Optional)
 2. Install PyTorch
-3. Install SSDN Package: ```pip install -e ssdn```
+3. Install SSDN package and dependencies: ```pip install -e ssdn```
 
 
 ## Preparing datasets
@@ -91,7 +94,7 @@ To evaluate a trained network against one of the validation sets, run:
 ```
 ssdn eval [-h] --model MODEL --dataset DATASET [--runs_dir RUNS_DIR]
                  [--batch_size BATCH_SIZE]
-Tthe following arguments are required: --model/-m, --dataset/-d
+The following arguments are required: --model/-m, --dataset/-d
 ```
 ---
 Further options can be viewed using: `ssdn eval --help`
