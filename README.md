@@ -2,7 +2,7 @@
 Reimplementers:
 **David Jones**, **Richard Crosland**, **Jason Barrett** | University of Southampton [ECS]
 
-Codebase for the reimplmentation of the focus [paper](https://arxiv.org/abs/1901.10277) as well as discussed baselines: Noise2Clean, [Noise2Noise](https://arxiv.org/abs/1803.04189), and [Noise2Void](https://arxiv.org/abs/1811.10980).
+Codebase for the reimplemented of the focus [paper](https://arxiv.org/abs/1901.10277) as well as discussed baselines: Noise2Clean, [Noise2Noise](https://arxiv.org/abs/1803.04189), and [Noise2Void](https://arxiv.org/abs/1811.10980).
 
 ![Denoising comparison](figures/example.png "Denoising Comparison")
 
@@ -62,7 +62,7 @@ ssdn train start [-h] --train_dataset TRAIN_DATASET
                         NOISE_STYLE [--noise_value {known,const,var}] [--mono]
                         [--diagonal] [--runs_dir RUNS_DIR]
 
-The following arguments are required: --train_dataset/-t, --iterations/-i, --algorithm/-a, --noise_style/-n
+The following arguments are required: --train_dataset/-t, --iterations/-i, --algorithm/-a, --noise_style/-n, --noise_value (when --algorithm=ssdn)
 ```
 Note that the validation dataset is optional, this can be ommitted but may be helpful to monitor convergence. Where a parameter is not provided the default in `cfg.py` will be used.
 
