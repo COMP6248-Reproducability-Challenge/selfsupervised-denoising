@@ -141,19 +141,19 @@ class TrainCommand(Command):
     @overrides
     def execute(self, args: Dict):
         if args["train_cmd"] == "start":
-            if args["algorithm"] == "ssdn" and "noise_value" not in args:
+            if args["algorithm"] == "ssdn" and args.get("noise_value", None) == None:
                 args["PARSER"].error("SSDN requires --noise_value")
             cfg = ssdn.cfg.base()
             if args.get("algorithm", None) is not None:
                 cfg[ConfigValue.ALGORITHM] = NoiseAlgorithm(args["algorithm"])
             if args.get("noise_style", None) is not None:
                 cfg[ConfigValue.NOISE_STYLE] = args["noise_style"]
-            if cfg.get("noise_value", None) is not None:
+            if args.get("noise_value", None) is not None:
                 cfg[ConfigValue.NOISE_VALUE] = NoiseValue(args["noise_value"])
             if args.get("mono", None) is not None:
                 cfg[ConfigValue.IMAGE_CHANNELS] = 1
             if args.get("diagonal", None) is not None:
-                cfg[ConfigValue.TRAIN_ITERATIONS] = args["diagonal"]
+                cfg[ConfigValue.TRAIN_ITERATIONS] = args["diagonal"] 
             trainer = DenoiserTrainer(cfg, runs_dir=args["runs_dir"])
         elif args["train_cmd"] == "resume":
             trainer = resume_run(args["run_dir"])
